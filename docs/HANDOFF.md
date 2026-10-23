@@ -111,6 +111,7 @@ Data lives in `%LOCALAPPDATA%\Original Accent`: `engines/` (environments, Huggin
 ## Install lessons (paid for once; do not rediscover)
 - Install torch and torchaudio from the PyTorch CUDA index, pinned to the exact versions the packages want. Then install everything else against a per-environment constraints file. A shared constraints file polluted installs, and an unpinned resolver pulled a CPU-only torch.
 - Chatterbox needs Python 3.11 and `setuptools<81` (its watermarker imports `pkg_resources`).
+- The update check asks the resolver what `--upgrade` would change (a dry run with the same constraints), not `pip list --outdated`. The outdated list named setuptools 84 for Chatterbox, which the `<81` cap never lets in, so the update notice came back after every update.
 - Chatterbox `cfg_weight=0` crashes (chatterbox-tts 0.1.7, batch-size mismatch), so "low" uses 0.05.
 - Write every output to a `.part` file and rename it when complete. A half-written WAV was once handed over.
 - Run workers windowless (`CREATE_NO_WINDOW`, `pythonw`). Console windows stole keyboard focus.

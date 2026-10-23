@@ -279,6 +279,28 @@ def _remote_rev(repo):
         return None
 
 
+def _pkg_name(req):
+    return re.split(r"[<>=!~;\[ ]", req, maxsplit=1)[0].strip().lower().replace("_", "-")
+
+
+def _pending_upgrades(n):
+    """What Update would actually change, asked of the resolver with the same constraints Update
+    uses. A plain 'outdated' list also names versions the engine can't take (Chatterbox caps
+    setuptools below 81), which then show as available forever however often Update runs."""
+    spec, py = ENVS[n], env_python(n)
+    cons = ENGINES / f"constraints-{n}.txt"
+    argv = [*uv_cmd(), "pip", "install", "--dry-run", "--upgrade", "-p", py,
+            *(["-c", cons] if cons.exists() else []), *spec["pkgs"]]
+    rc, txt = capture(argv, timeout=300)
+    if rc != 0:
+        raise RuntimeError(txt.strip().splitlines()[-1] if txt.strip() else f"uv exited {rc}")
+    old = {_pkg_name(a): b for a, b in re.findall(r"(?m)^\s*-\s+(\S+?)==(\S+)", txt)}
+    new = {_pkg_name(a): b for a, b in re.findall(r"(?m)^\s*\+\s+(\S+?)==(\S+)", txt)}
+    wanted = {_pkg_name(p) for p in spec["pkgs"]}
+    return [{"name": k, "version": old[k], "latest": v} for k, v in sorted(new.items())
+            if k in wanted and k not in PINNED and k in old and old[k] != v]
+
+
 def check_updates():
     out = {"checked": now(), "engines": {}}
     for n, spec in ENVS.items():
@@ -289,12 +311,8 @@ def check_updates():
             out["engines"][n] = {"title": spec["title"], "packages": pk, "models": [], "error": None}
             continue
         e = {"title": spec["title"], "packages": [], "models": [], "error": None}
-        rc, txt = capture([*uv_cmd(), "pip", "list", "-p", env_python(n), "--outdated", "--format", "json"], timeout=120)
         try:
-            data = json.loads(txt[txt.index("["):txt.rindex("]") + 1]) if rc == 0 else []
-            wanted = {p.split("<")[0].split("=")[0].split(">")[0] for p in spec["pkgs"]} | {"torch", "torchaudio"}
-            e["packages"] = [{"name": d["name"], "version": d["version"], "latest": d.get("latest_version")}
-                             for d in data if d["name"].lower() in wanted and d["name"].lower() not in PINNED]
+            e["packages"] = _pending_upgrades(n)
         except Exception as ex:
             e["error"] = f"Couldn't check packages: {ex}"
         for repo in spec["models"]:
