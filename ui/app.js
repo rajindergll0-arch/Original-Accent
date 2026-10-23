@@ -167,6 +167,19 @@ function typeset(root) {
     el.dataset.ts = "1";
   });
 }
+function gpuText(g, tail) { return g.ok ? `${esc(g.name)} · ${g.used_gb}/${g.total_gb} GB${tail}` : esc(g.error || "No NVIDIA GPU found"); }
+// Video memory in use: every 2 s while something runs (models load and unload), every 10 s otherwise.
+// Only the readouts' text changes, so nothing else on the page redraws.
+let gpuAt = 0;
+setInterval(async () => {
+  if (!S.boot?.gpu?.ok || document.hidden) return;
+  const busy = S.run?.state === "running";
+  if (Date.now() - gpuAt < (busy ? 2000 : 10000)) return;
+  gpuAt = Date.now();
+  try { const g = await api("gpu_mem"); if (!g.ok) return; S.boot.gpu = g;
+    document.querySelectorAll("[data-gpu]").forEach((el) => (el.textContent = el.dataset.gpu === "top" ? `${g.name} · ${g.used_gb}/${g.total_gb} GB` : `${g.name} · ${g.used_gb}/${g.total_gb} GB in use`));
+  } catch {}
+}, 1000);
 function renderTop() { $("#top").innerHTML = topHTML(); }
 function topHTML() {
   const r = S.run || {}, g = S.boot.gpu || {}, busy = r.state === "running";
@@ -176,7 +189,7 @@ function topHTML() {
     ${S.boot.demo ? `<span class="tag" style="color:var(--cbx)">Demo mode · simulated engines</span>` : ""}
     <span class="spacer"></span>
     ${busy ? `<span class="small">${esc(r.stage)}${r.total ? ` · ${r.done}/${r.total}` : ""}</span>` : ""}
-    <span class="mono small mute">${g.ok ? `${esc(g.name)} · ${g.used_gb}/${g.total_gb} GB` : "No NVIDIA GPU found"}</span>`;
+    <span class="mono small mute" data-gpu="top">${gpuText(g, "")}</span>`;
 }
 function renderNav() { $("#nav").innerHTML = navHTML(); }
 function navHTML() {
@@ -583,7 +596,7 @@ function pageSettings() {
       <label class="switch"><input type="checkbox" id="dcbx" ${s.include_chatterbox ? "checked" : ""}><span>Include Chatterbox takes by default</span></label>
       <label class="switch"><input type="checkbox" id="dfree" ${s.free_gpu_before_run ? "checked" : ""}><span>Free GPU memory held by other local apps (e.g. Ollama) before each run<br><span class="note">${S.boot.ollama?.length ? `Currently loaded: ${esc(S.boot.ollama.join(", "))}` : "Nothing else is holding the GPU right now."}</span></span></label></div>
     <div class="panel" style="display:flex;flex-direction:column;gap:.7rem"><strong>Engines</strong>
-      <div class="mono small mute">${g.ok ? `${esc(g.name)} · ${g.used_gb}/${g.total_gb} GB in use` : esc(g.error || "No GPU")}</div>
+      <div class="mono small mute" data-gpu="settings">${gpuText(g, " in use")}</div>
       <div class="erows">${Object.entries(e).map(([n, x]) => `<div class="erow"><span class="row" style="flex-wrap:nowrap;gap:.6rem"><span class="dot" style="background:${x.installed ? "var(--voice)" : "var(--line2)"}"></span><span class="trunc">${esc(x.title)}</span></span>
         <div class="estat">${engStatus(n)}</div>
         <button class="btn sm" data-install="${n}" ${busy ? "disabled" : ""}>${x.installed ? "Repair" : "Install"}</button></div>`).join("")}</div></div>

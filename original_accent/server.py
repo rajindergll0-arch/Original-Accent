@@ -125,6 +125,7 @@ API = {
     "full_peaks": lambda a: jobs.peaks(jobs.ensure_full(a["id"]), a.get("n", 1200)),
     "settings_save": lambda a: paths.save_settings(a),
     "gpu": lambda a: engines.gpu_info() | {"ollama": engines.ollama_models()},
+    "gpu_mem": lambda a: engines.gpu_info(),
     "free_gpu": lambda a: {"unloaded": engines.free_gpu()},
     "engines": lambda a: engines.status(),
     "setup_install": lambda a: jobs.start_setup(a["engines"], bool(a.get("upgrade"))),
