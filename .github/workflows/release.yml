@@ -25,10 +25,11 @@ jobs:
             test "v$V" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME but app version is $V"; exit 1; }
           fi
           echo "TAG=v$V" >> "$GITHUB_ENV"
-          # publishing a draft made by Run workflow creates the tag; don't build a second release then
-          if gh release view "v$V" >/dev/null 2>&1; then
-            echo "Release v$V already exists; nothing to do."; echo "SKIP=1" >> "$GITHUB_ENV"
-          fi
+          # published already (publishing a draft creates the tag, which runs this again): leave it.
+          # still a draft: rebuild its files from this commit.
+          D=$(gh release view "v$V" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+          if [ "$D" = "false" ]; then echo "Release v$V is published; nothing to do."; echo "SKIP=1" >> "$GITHUB_ENV"; fi
+          echo "DRAFT=$D" >> "$GITHUB_ENV"
       - name: Build the Windows installer
         if: env.SKIP != '1'
         run: |
@@ -41,5 +42,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "$DRAFT" = "true" ]; then
+            gh release upload "$TAG" dist/*.exe dist/SHA256SUMS.txt --clobber
+            gh release edit "$TAG" --target "$GITHUB_SHA" --notes-file dist/notes.md
+            exit 0
+          fi
           gh release create "$TAG" dist/*.exe dist/SHA256SUMS.txt --target "$GITHUB_SHA" \
             --draft --title "Original Accent ${TAG#v}" --notes-file dist/notes.md
