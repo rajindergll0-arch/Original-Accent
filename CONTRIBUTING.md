@@ -25,4 +25,4 @@ Please don't attach recordings of real people's voices to issues.
   - Text and layout hold up at every window size, interface size and skin.
 
 ## Releases
-Push a tag like `v0.3.1`. GitHub Actions builds the installer and attaches it to a draft release. Write the notes, then publish.
+Push a tag like `v0.3.1`, or run the **Release** workflow from the Actions tab (it uses the app version as the tag). GitHub Actions builds the installer and attaches it to a draft release. Write the notes, then publish.

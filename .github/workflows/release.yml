@@ -1,7 +1,12 @@
 name: Release
+# Two ways to start a release:
+# - push a tag like v0.3.1 (it must match the app version), or
+# - Actions → Release → Run workflow, which uses the app version as the tag.
+# Either way the installer is built and attached to a draft release to review and publish.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,19 +16,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check the tag matches the app version
+      - name: Work out the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           V=$(python3 -c "import re;print(re.search(r'\"(.+)\"',open('original_accent/__init__.py').read()).group(1))")
-          test "v$V" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME but app version is $V"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            test "v$V" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME but app version is $V"; exit 1; }
+          fi
+          echo "TAG=v$V" >> "$GITHUB_ENV"
+          # publishing a draft made by Run workflow creates the tag; don't build a second release then
+          if gh release view "v$V" >/dev/null 2>&1; then
+            echo "Release v$V already exists; nothing to do."; echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
       - name: Build the Windows installer
+        if: env.SKIP != '1'
         run: |
           sudo apt-get update && sudo apt-get install -y nsis
           installer/build.sh
           (cd dist && sha256sum *.exe > SHA256SUMS.txt)
           awk '/^## /{n++} n==1' CHANGELOG.md > dist/notes.md
       - name: Draft the release
+        if: env.SKIP != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.exe dist/SHA256SUMS.txt \
-            --draft --title "Original Accent ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md
+          gh release create "$TAG" dist/*.exe dist/SHA256SUMS.txt --target "$GITHUB_SHA" \
+            --draft --title "Original Accent ${TAG#v}" --notes-file dist/notes.md
