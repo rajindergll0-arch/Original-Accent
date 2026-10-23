@@ -93,7 +93,9 @@ def main():
     _dpi_aware()
     httpd, url = server.serve()
     if "--browser" in sys.argv:
-        print(url); webbrowser.open(url)
+        print(url, flush=True)
+        if not os.environ.get("OA_NO_OPEN"):
+            webbrowser.open(url)
         try:
             while True:
                 time.sleep(3600)

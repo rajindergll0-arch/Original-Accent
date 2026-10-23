@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
 tmp = Path(tempfile.mkdtemp())
-env = dict(os.environ, OA_DEMO="1", OA_DATA=str(tmp / "data"), OA_EXPORTS=str(tmp / "exports"))
+env = dict(os.environ, OA_DEMO="1", OA_DATA=str(tmp / "data"), OA_EXPORTS=str(tmp / "exports"), OA_NO_OPEN="1")
 srv = subprocess.Popen([sys.executable, "-m", "original_accent", "--browser"], cwd=ROOT, env=env,
                        stdout=subprocess.PIPE, text=True)
 url = srv.stdout.readline().strip()

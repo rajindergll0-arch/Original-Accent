@@ -24,6 +24,7 @@ jobs:
           pip install numpy soundfile playwright
           python -m playwright install --with-deps chromium
       - name: Demo-mode UI test (simulated engines, every skin)
+        timeout-minutes: 10
         run: python tests/smoke_demo.py
       - name: Installer builds
         run: |
