@@ -1,0 +1,6 @@
+# The app shell. Engines get their own isolated environments at first run.
+pywebview>=5.3
+numpy
+soundfile
+imageio-ffmpeg
+uv
