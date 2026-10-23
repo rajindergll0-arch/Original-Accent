@@ -283,6 +283,14 @@ def _pkg_name(req):
     return re.split(r"[<>=!~;\[ ]", req, maxsplit=1)[0].strip().lower().replace("_", "-")
 
 
+def _installed(n):
+    """Installed versions of the packages the engine asks for, plus its PyTorch, in that order."""
+    rc, txt = capture([*uv_cmd(), "pip", "list", "-p", env_python(n), "--format", "json"], timeout=120)
+    have = {_pkg_name(d["name"]): d["version"] for d in json.loads(txt[txt.index("["):txt.rindex("]") + 1])} if rc == 0 else {}
+    names = [_pkg_name(p) for p in ENVS[n]["pkgs"]] + ["torch", "torchaudio"]
+    return [{"name": k, "version": have[k]} for k in dict.fromkeys(names) if k in have]
+
+
 def _pending_upgrades(n):
     """What Update would actually change, asked of the resolver with the same constraints Update
     uses. A plain 'outdated' list also names versions the engine can't take (Chatterbox caps
@@ -308,9 +316,14 @@ def check_updates():
             continue
         if paths.DEMO:
             pk = [{"name": MAIN_PKG[n], "version": "0.1.0", "latest": "0.1.1"}] if n != "score" else []
-            out["engines"][n] = {"title": spec["title"], "packages": pk, "models": [], "error": None}
+            inst = [{"name": _pkg_name(p), "version": "0.1.0"} for p in spec["pkgs"]] + [{"name": "torch", "version": "2.6.0+cu126"}]
+            out["engines"][n] = {"title": spec["title"], "packages": pk, "installed": inst, "models": [], "error": None}
             continue
-        e = {"title": spec["title"], "packages": [], "models": [], "error": None}
+        e = {"title": spec["title"], "packages": [], "installed": [], "models": [], "error": None}
+        try:
+            e["installed"] = _installed(n)
+        except Exception:
+            pass
         try:
             e["packages"] = _pending_upgrades(n)
         except Exception as ex:

@@ -87,7 +87,7 @@ async function boot() {
   setInterval(poll, 900);
   // engine update check: at most once a day, metadata only (PyPI, Hugging Face)
   S.updates = await api("updates_last").catch(() => null);
-  const age = S.updates?.checked ? (Date.now() - Date.parse(S.updates.checked)) / 36e5 : 1e9;
+  const age = S.updates?.checked && Object.values(S.updates.engines || {}).every((e) => e.installed) ? (Date.now() - Date.parse(S.updates.checked)) / 36e5 : 1e9;   // results saved before versions were listed count as stale
   if (S.boot.settings.check_updates && age > 24 && !needsSetup()) api("updates_check").then((u) => { S.updates = u; if (u.any) { toast("Engine updates are available. See Settings."); renderNav(); } }).catch(() => {});
   // engines chosen in the Windows installer: start installing them straight away
   const ch = S.boot.choices;
@@ -616,9 +616,16 @@ function fitPreviews() { document.querySelectorAll(".pvwrap").forEach((w) => { c
 function updatesPanel(busy) {
   const u = S.updates, s = S.boot.settings;
   const rows = u ? Object.entries(u.engines || {}).map(([n, e]) => {
+    const up = Object.fromEntries(e.packages.map((p) => [p.name, p.latest || "newer"]));
     const items = [...e.packages.map((p) => `${esc(p.name)} ${esc(p.version)} → ${esc(p.latest || "newer")}`), ...e.models.map((m) => `model ${esc(m.name.split("/")[1])} (newer files)`)];
-    return `<div class="row"><span class="dot" style="background:${items.length ? "var(--accent)" : "var(--voice)"}"></span><span style="min-width:12rem">${esc(e.title)}</span>
-      <span class="small mute wrap" style="flex:1;min-width:10rem">${e.error ? esc(e.error) : items.length ? items.join(" · ") : "Up to date"}</span>
+    // every package with its installed version, whether or not there's an update; the new version beside the ones that have one
+    const inst = (e.installed || []).map((p) => `<span class="nw">${esc(p.name)}\u00a0${esc(p.version)}${up[p.name] ? `<strong> → ${esc(up[p.name])}</strong>` : ""}</span>`);
+    const extra = e.packages.filter((p) => !(e.installed || []).some((i) => i.name === p.name)).map((p) => `<span class="nw">${esc(p.name)} ${esc(p.version)}<strong> → ${esc(p.latest || "newer")}</strong></span>`);
+    const models = e.models.map((m) => `<span class="nw">model ${esc(m.name.split("/")[1])}<strong> → newer files</strong></span>`);
+    const status = e.error ? esc(e.error) : items.length ? `${items.length} update${items.length > 1 ? "s" : ""} available` : "Up to date";
+    return `<div class="row" style="align-items:flex-start"><span class="dot" style="margin-top:.45em;background:${items.length ? "var(--accent)" : "var(--voice)"}"></span>
+      <span style="min-width:12rem">${esc(e.title)}<br><span class="small mute">${status}</span></span>
+      <span class="small mute wrap" style="flex:1;min-width:10rem;display:flex;flex-wrap:wrap;gap:.2rem .9rem">${[...inst, ...extra, ...models].join("")}</span>
       ${items.length ? `<button class="btn sm" data-upgrade="${n}" ${busy ? "disabled" : ""}>Update</button>` : ""}</div>`; }).join("") : "";
   return `<div class="panel" style="display:flex;flex-direction:column;gap:.7rem"><div class="row"><strong>Updates</strong><span class="spacer"></span>
       <span class="small mute">${u?.checked ? `Last checked ${esc(u.checked.replace("T", " "))}` : "Not checked yet"}</span>
