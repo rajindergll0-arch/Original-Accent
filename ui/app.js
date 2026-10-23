@@ -160,6 +160,9 @@ function autosize(el) {
 }
 function typeset(root) {
   root.querySelectorAll("textarea.input").forEach(autosize);
+  typesetText(root);
+}
+function typesetText(root) {
   root.querySelectorAll(".lead, .note, .gbody p, .gbody li, .toast span, .notice p, .h1, label > span, .switch span").forEach((el) => {
     if (el.closest(".pv") || el.dataset.ts === "1") return;
     const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
@@ -180,7 +183,7 @@ setInterval(async () => {
     document.querySelectorAll("[data-gpu]").forEach((el) => (el.textContent = el.dataset.gpu === "top" ? `${g.name} · ${g.used_gb}/${g.total_gb} GB` : `${g.name} · ${g.used_gb}/${g.total_gb} GB in use`));
   } catch {}
 }, 1000);
-function renderTop() { $("#top").innerHTML = topHTML(); }
+function renderTop() { morph($("#top"), topHTML()); }
 function topHTML() {
   const r = S.run || {}, g = S.boot.gpu || {}, busy = r.state === "running";
   const jobName = S.job ? S.job.name : "No job open";
@@ -191,7 +194,7 @@ function topHTML() {
     ${busy ? `<span class="small">${esc(r.stage)}${r.total ? ` · ${r.done}/${r.total}` : ""}</span>` : ""}
     <span class="mono small mute" data-gpu="top">${gpuText(g, "")}</span>`;
 }
-function renderNav() { $("#nav").innerHTML = navHTML(); }
+function renderNav() { morph($("#nav"), navHTML()); }
 function navHTML() {
   return PAGES.map(([id, label], i) => {
     const off = (id === "compare" || id === "deliver" || id === "generate") && !S.job;
@@ -202,10 +205,64 @@ function navHTML() {
 let shownPage = null;
 function renderPage() {
   const m = $("#main");
-  // a new page starts at the top; re-drawing the same page (progress, playback) keeps your place
-  if (shownPage !== S.page) { m.scrollTop = 0; shownPage = S.page; }
-  m.innerHTML = { voice: pageVoice, script: pageScript, generate: pageGenerate, compare: pageCompare, deliver: pageDeliver, settings: pageSettings }[S.page]();
-  m.firstElementChild?.classList.add("fade");
+  const html = { voice: pageVoice, script: pageScript, generate: pageGenerate, compare: pageCompare, deliver: pageDeliver, settings: pageSettings }[S.page]();
+  // A new page is drawn fresh, starts at the top and fades in. The same page drawn again
+  // (progress, playback, a setting) is patched in place: only what changed is touched.
+  if (shownPage !== S.page) { m.innerHTML = html; typesetText(m); m.scrollTop = 0; shownPage = S.page; m.firstElementChild?.classList.add("fade"); }
+  else morph(m, html, ["fade"]);
+}
+
+/* ---------------- in-place patching ----------------
+   Redrawing a region by replacing its HTML throws away every element in it: canvases blank,
+   animations restart, hover and focus are lost, and the eye sees a flash. morph() builds the
+   new markup off-screen, then walks old and new side by side and changes only what differs:
+   a text node's text, an attribute, an element that is a different kind. Unchanged elements
+   stay the same objects, so nothing visibly moves unless its content really changed. */
+function morph(el, html, keepClasses = []) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  typesetText(tpl.content);   // so typeset text compares equal to what's already on screen
+  patchKids(el, tpl.content, keepClasses);
+}
+function sameKind(a, b) {
+  if (a.nodeType !== b.nodeType) return false;
+  if (a.nodeType !== 1) return true;
+  return a.tagName === b.tagName && a.id === b.id && a.getAttribute("data-key") === b.getAttribute("data-key") &&
+    (a.tagName !== "INPUT" || a.type === b.type);
+}
+function patchKids(a, b, keep) {
+  const an = [...a.childNodes], bn = [...b.childNodes];
+  bn.forEach((y, i) => {
+    const x = an[i];
+    if (!x) a.appendChild(y);
+    else if (!sameKind(x, y)) a.replaceChild(y, x);
+    else patchNode(x, y, keep);
+  });
+  for (let i = bn.length; i < an.length; i++) an[i].remove();
+}
+function patchNode(x, y, keep) {
+  if (x.nodeType !== 1) { if (x.nodeValue !== y.nodeValue) x.nodeValue = y.nodeValue; return; }
+  // attributes the page sets itself after drawing (a canvas's pixel size, a text area's grown
+  // height, a preview's scale) belong to the live element and are left alone
+  const live = new Set(["data-live", ...(x.dataset.live ? x.dataset.live.split(",") : []),
+    ...(x.tagName === "CANVAS" ? ["width", "height"] : x.tagName === "TEXTAREA" ? ["style"] : [])]);
+  for (const { name } of [...x.attributes]) if (!y.hasAttribute(name) && !live.has(name)) x.removeAttribute(name);
+  for (const { name, value } of [...y.attributes]) {
+    if (live.has(name)) continue;
+    if (name === "class" && keep.length) {
+      const v = [...new Set([...value.split(/\s+/), ...keep.filter((c) => x.classList.contains(c))])].filter(Boolean).join(" ");
+      if (x.getAttribute("class") !== v) x.setAttribute("class", v);
+    } else if (x.getAttribute(name) !== value) x.setAttribute(name, value);
+  }
+  const focused = x === document.activeElement;
+  if (x.tagName === "INPUT") {
+    if (!focused && x.value !== y.value) x.value = y.value;
+    if (x.checked !== y.checked) x.checked = y.checked;
+    return;
+  }
+  if (x.tagName === "TEXTAREA") { if (!focused && x.value !== y.value) x.value = y.value; return; }
+  if (x.tagName === "SELECT") { patchKids(x, y, keep); if (!focused) x.value = [...y.options].find((o) => o.defaultSelected)?.value ?? x.value; return; }
+  patchKids(x, y, keep);
 }
 
 /* ---------------- setup overlay ---------------- */
@@ -232,9 +289,9 @@ function needsSetup() { return !S.boot.engines.qwen.installed; }
 function setupSel() { if (!S.setupSel) S.setupSel = { qwen: true, score: true, cbx: true }; return S.setupSel; }
 function renderOverlay() {
   const o = $("#overlay");
-  if (!needsSetup() || S.setupDismissed) { o.innerHTML = ""; return; }
+  if (!needsSetup() || S.setupDismissed) { if (o.firstChild) o.innerHTML = ""; return; }
   const e = S.boot.engines, g = S.boot.gpu, r = S.run || {}, busy = r.state === "running" && r.kind === "setup", sel = setupSel();
-  o.innerHTML = `<div class="overlay"><div class="setup panel">
+  morph(o, `<div class="overlay"><div class="setup panel">
     <div class="kicker">First run</div><h1 class="h1">Set up the voice engines</h1>
     <p class="lead">Everything runs on this PC. Nothing is sent to a cloud service. Setup downloads the open-source engines and their models once (several GB each); after that Original Accent works offline.</p>
     <div class="panel" style="background:var(--deep)"><div class="row"><span class="dot" style="background:${g.ok ? "var(--voice)" : "#ff7a6e"}"></span>
@@ -246,7 +303,7 @@ function renderOverlay() {
     <div class="row"><button class="btn primary" data-act="install" ${busy || !g.ok ? "disabled" : ""}>${busy ? "Installing…" : "Install engines"}</button>
       <span class="note">You can keep using the PC meanwhile.</span><span class="spacer"></span>
       <button class="btn" data-act="skip-setup">Later</button></div>
-  </div></div>`;
+  </div></div>`);
 }
 
 /* ---------------- Voice ---------------- */
@@ -624,7 +681,7 @@ function previewHTML(skin) {
   // buttons can't sit inside the card's button: keep their look, drop their behaviour
   return html.replace(/<button/g, "<span").replace(/<\/button>/g, "</span>").replace(/ data-(go|sel|play|act|part|step|ab)="[^"]*"/g, "");
 }
-function fitPreviews() { document.querySelectorAll(".pvwrap").forEach((w) => { const pv = w.firstElementChild; if (pv) pv.style.transform = `scale(${w.clientWidth / 1280})`; }); }
+function fitPreviews() { document.querySelectorAll(".pvwrap").forEach((w) => { const pv = w.firstElementChild; if (pv) { pv.dataset.live = "style"; pv.style.transform = `scale(${w.clientWidth / 1280})`; } }); }
 
 function updatesPanel(busy) {
   const u = S.updates, s = S.boot.settings;

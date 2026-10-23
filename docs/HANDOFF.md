@@ -106,6 +106,8 @@ original_accent/engines.py   isolated engine envs (uv), CUDA-torch pinning, GPU 
 workers/*.py           run inside each engine env as windowless subprocesses
 ui/                    index.html + app.css (4 skins as token sets) + app.js (no build step), bundled OFL fonts
 ```
+Redraws go through `morph()` in app.js: the new markup is built off-screen and only what differs is changed in the live page, so progress and readouts update without the page flashing. Only a change of page replaces the page outright (and fades it in). Anything the page sets on an element after drawing it (a canvas's pixel size, a preview's scale) is listed in that element's `data-live` so `morph()` leaves it alone.
+
 Data lives in `%LOCALAPPDATA%\Original Accent`: `engines/` (environments, Hugging Face cache), `voices/<id>/` (source file, `ref.wav` at 24 kHz mono, `voice.json`), `jobs/<id>/` (`job.json`, `takes/*.wav`, `scores.json`, `errors.jsonl`), `logs/`, `settings.json`.
 
 ## Install lessons (paid for once; do not rediscover)
