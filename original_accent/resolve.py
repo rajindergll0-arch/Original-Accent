@@ -77,6 +77,11 @@ def install_scripts():
     return {"folder": str(d), "scripts": list(MENU.values())}
 
 
+def console_lines(key):
+    """The Console starts in Lua ("Lua>" prompt); it can be switched to Python. A line for each."""
+    return {"lua": f"dofile([[{scripts_dir() / (MENU[key] + '.lua')}]])", "py": console_line(key)}
+
+
 def console_line(key):
     """One line for Resolve's Console (Py3), doing what the menu item does. Resolve 21.1 free keeps
     console scripting (with Python built in) while the Workspace > Scripts menu needs Studio."""
@@ -222,4 +227,4 @@ def send(jid, place, route):
         return {"done": True, **r}
     req["id"] = f"{int(time.time())}"
     write_outbox(req)
-    return {"done": False, "menu": MENU["takes"], "console": console_line("takes"), "files": len(req["files"]), "placed": len(req["place"])}
+    return {"done": False, "menu": MENU["takes"], "console": console_lines("takes"), "files": len(req["files"]), "placed": len(req["place"])}

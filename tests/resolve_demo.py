@@ -98,7 +98,7 @@ try:
         pg.evaluate("api('voice_update',{id:S.voiceId,transcript:'Hello there.'}).then(nv=>{replaceVoice(nv);render()})")
         pg.click("[data-go=script]"); pg.evaluate("S.draft=null;render()"); pg.click("[data-act=r-markers]")
         wait(pg, "!!S.rwait", "waiting for markers"); problems["script-waiting"] = pg.evaluate(CHECK)
-        run_console(pg.evaluate("S.rwait.console"))
+        run_console(pg.evaluate("S.rwait.console.py"))
         wait(pg, "!!S.rmark", "markers through the menu"); pg.click("[data-act=r-use-markers]")
         assert len(pg.evaluate("draft().parts")) == 3
         pg.click("[data-act=generate]")
@@ -108,7 +108,7 @@ try:
         pg.check("input[name=rplace][value=markers]")
         pg.click("[data-act=r-send]"); wait(pg, "!!S.rwait", "waiting to bring in takes")
         problems["deliver-waiting"] = pg.evaluate(CHECK)
-        run_console(pg.evaluate("S.rwait.console"))
+        run_console(pg.evaluate("S.rwait.console.py"))
         wait(pg, "!!S.rsent", "takes brought in"); sent = pg.evaluate("S.rsent")
         assert "3 placed" in sent, (sent, pg.evaluate("S.job.picks"), pg.evaluate("S.job.parts"))
         pg.screenshot(path=str(tmp / "deliver.png"))

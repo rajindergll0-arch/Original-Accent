@@ -397,8 +397,8 @@ function rWait(kinds) {
   const w = S.rwait;
   if (w && kinds.includes(w.kind)) return `<div class="panel rwait" style="display:flex;flex-direction:column;gap:.6rem"><div class="row"><span class="tally on"></span><strong>Waiting for Resolve</strong></div>
     <p class="note" style="margin:0">In DaVinci Resolve, choose <b>Workspace → Scripts → ${esc(w.menu)}</b>. This page carries on by itself when it's done.</p>
-    ${w.console ? `<p class="note" style="margin:0">If nothing happens (Resolve 21.1 free only runs scripts from its Console): open <b>Workspace → Console</b>, choose <b>Py3</b> at the top, paste this line and press Enter.</p>
-    <div class="row" style="flex-wrap:nowrap;gap:.5rem"><code class="mono small trunc" style="flex:1;min-width:0;padding:.45rem .6rem;background:var(--panel);border:1px solid var(--line);border-radius:6px" title="${esc(w.console)}">${esc(w.console)}</code><button class="btn sm" data-act="r-copy">Copy</button></div>` : ""}
+    ${w.console ? `<p class="note" style="margin:0">If nothing happens (Resolve 21.1 free only runs scripts from its Console): open <b>Workspace → Console</b>, paste the line that matches its prompt, and press Enter.</p>
+    ${[["lua", "Lua>"], ["py", "Py3>"]].map(([k, p]) => `<div class="row" style="flex-wrap:nowrap;gap:.5rem"><span class="mono small mute" style="width:2.6rem;flex:none">${p}</span><code class="mono small trunc" style="flex:1;min-width:0;padding:.45rem .6rem;background:var(--panel);border:1px solid var(--line);border-radius:6px" title="${esc(w.console[k])}">${esc(w.console[k])}</code><button class="btn sm" data-act="r-copy" data-lang="${k}">Copy</button></div>`).join("")}` : ""}
     ${waitStatus(w)}
     <div class="row"><button class="btn sm" data-act="r-cancel">Cancel</button></div></div>`;
   if (S.rbusy && kinds.includes(S.rbusyKind)) return `<div class="panel rwait"><div class="row"><span class="tally on"></span><strong>${esc(S.rbusy)}</strong></div></div>`;
@@ -987,7 +987,7 @@ async function act(a, el) {
   else if (a === "export") { const o = exportOpts(); S.exportResult = await api("job_export", { id: S.jobId, separate: o.separate, joined: o.joined }); render(); }
   else if (a === "open-dir") { await api("open_folder", { path: S.exportResult.folder }); }
   else if (a === "r-cancel") { S.rwait = null; render(); }
-  else if (a === "r-copy") { await api("clipboard_set", { text: S.rwait.console }).catch(() => navigator.clipboard?.writeText(S.rwait.console)); toast("Copied. Paste it into Resolve's Console (Py3) and press Enter."); }
+  else if (a === "r-copy") { const k = el.dataset.lang, t = S.rwait.console[k]; await api("clipboard_set", { text: t }).catch(() => navigator.clipboard?.writeText(t)); toast(`Copied. Paste it into Resolve's Console at the ${k === "lua" ? "Lua>" : "Py3>"} prompt and press Enter.`); }
   else if (a === "r-voice") {
     if (!S.consent) throw new Error("Tick “I have the speaker's permission to clone their voice” first.");
     S.rbusyKind = "clip";

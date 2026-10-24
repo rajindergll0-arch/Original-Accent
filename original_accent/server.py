@@ -132,7 +132,7 @@ def resolve_status(a):
 def wait_for(kind, which=None):
     """Free route: the operator runs a menu script in Resolve; the page then polls resolve_inbox."""
     key = "markers" if kind == "markers" else which
-    return {"waiting": True, "kind": kind, "menu": resolve.MENU[key], "console": resolve.console_line(key), "since": time.time()}
+    return {"waiting": True, "kind": kind, "menu": resolve.MENU[key], "console": resolve.console_lines(key), "since": time.time()}
 
 
 def resolve_inbox(a):
