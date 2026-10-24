@@ -8,8 +8,14 @@
 - **Send to Resolve:** import the picks into an *Original Accent* bin, and optionally place them on new audio tracks, at the playhead or back at their markers. Existing tracks are never touched.
 - **Two ways to connect,** chosen in Settings: *Resolve Studio: direct* (Original Accent drives Resolve itself) or *Resolve (free)*, where outside control was removed in 21.1: markers come from Resolve's marker EDL export, voices from the clip's file, and takes go in by pasting one line into Resolve's Console.
 
+**Setting it up**
+- Install over 0.3.0: voices, jobs, engines and settings are kept.
+- Open **Settings → DaVinci Resolve** and choose your edition. For Studio, also set Resolve's **Preferences → System → General → External scripting using** to **Local**.
+- With the free edition, Original Accent adds a few items to Resolve's Workspace → Scripts menu. Resolve 21.1 free lists them but won't run them from there; paste the line the app shows into **Workspace → Console** instead. Uninstalling Original Accent removes these items.
+
 **Known limits**
-- Confirmed on Resolve 21.1.1 (free): takes into the edit through the Console. Not yet confirmed on real Resolve: the Studio route, and markers from an EDL. Both are tested against a simulated Resolve.
+- Confirmed on Resolve 21.1.1 (free): takes into the edit through the Console. Not yet confirmed on real Resolve: the Studio route, and markers from an EDL. Both are tested against a simulated Resolve; please report anything that misbehaves.
+- With the free edition, Resolve can't tell Original Accent when it has finished, so you press *It's done* after the Console says so.
 
 ## 0.3.0 — first public release (beta)
 

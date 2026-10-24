@@ -13,7 +13,7 @@ It isn't a new voice model. It's a front end and workflow built around open mode
 
 **Everything runs on your own PC. Nothing is sent to a cloud service.**
 
-> **Status: beta (0.3).** It has been used in real video work, but only tested on one machine (Windows 11, RTX 4090). Expect rough edges, and please report them.
+> **Status: beta (0.4).** It has been used in real video work, but only tested on one machine (Windows 11, RTX 4090). Expect rough edges, and please report them.
 
 ![Compare screen, Grade skin](docs/screenshots/compare-grade.png)
 <sub>Screenshots are from the app's demo mode, which simulates the engines, so the waveforms are placeholders.</sub>
