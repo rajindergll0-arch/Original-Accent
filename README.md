@@ -47,7 +47,7 @@ Four interface skins are included (Grade, Reel, Signal, Booth), along with an in
 | Linux with NVIDIA | Runs from source in principle; untested |
 | Recordings in | Anything ffmpeg reads (WAV, MP3, M4A, FLAC, MP4, MOV, MKV…), up to 3 hours or 4 GB |
 | Audio out | WAV, 24 kHz mono |
-| DaVinci Resolve | Studio (direct) and free (through its Scripts menu); see below |
+| DaVinci Resolve | Studio (direct) and free (a few steps by hand); see below |
 | Language | English. Qwen3-TTS supports nine more languages, which the app doesn't offer yet. |
 | Disk space | About 30–40 GB for engines and models |
 | Internet | Needed to install and download engines; afterwards it works offline |
@@ -77,10 +77,12 @@ Choose how to connect in **Settings → DaVinci Resolve**:
 
 | | Resolve Studio | Resolve (free) |
 |---|---|---|
-| How | Original Accent controls Resolve directly: one click | Original Accent adds items to Resolve's **Workspace → Scripts** menu; you run one when the app asks |
-| Setup | In Resolve, set **Preferences → System → General → External scripting using** to **Local** | Choose the Scripts-menu option in Settings, then restart Resolve once |
+| Voice from a clip | Selected clip or clip at playhead, one click | Drop the clip's file in |
+| Script from markers | One click | Export **Timelines → Export → Timeline Markers to EDL** in Resolve, then choose that file |
+| Takes into the edit | One click | Paste one line the app gives you into **Workspace → Console**, then press *It's done* |
+| Setup | In Resolve, set **Preferences → System → General → External scripting using** to **Local** | Choose *Resolve (free)* in Settings |
 
-From Resolve 21.1, outside programs can't control the free edition, which is why it has its own route. **Status:** built against Resolve's documented scripting API and tested with a simulated Resolve, but not yet against a real copy. Please report anything that misbehaves.
+From Resolve 21.1, outside programs can't control the free edition, and scripts in its Console can read files but not save them, which is why the free route has steps by hand. **Status:** takes into the edit has been confirmed on Resolve 21.1.1 (free). The rest is built against Resolve's documented scripting API and tested with a simulated Resolve; please report anything that misbehaves.
 
 ## Responsible use
 Voice cloning can be misused. Original Accent asks you to confirm you have the speaker's permission before adding any recording, and keeps that confirmation with the voice. Please:

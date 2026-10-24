@@ -6,11 +6,10 @@
 - **Voice from Resolve:** use the clip selected in the Media Pool (its In and Out marks, if set) or the clip under the playhead (the part used in the edit). The cleanest section is picked inside that range.
 - **Script from markers:** each note on the current timeline's markers becomes a part, in timeline order, filtered by marker colour. Parts remember their marker's position.
 - **Send to Resolve:** import the picks into an *Original Accent* bin, and optionally place them on new audio tracks, at the playhead or back at their markers. Existing tracks are never touched.
-- **Two ways to connect,** chosen in Settings: *Resolve Studio: direct* (Original Accent drives Resolve itself) or *through Resolve's Scripts menu* (for the free edition, where outside control was removed in Resolve 21.1).
+- **Two ways to connect,** chosen in Settings: *Resolve Studio: direct* (Original Accent drives Resolve itself) or *Resolve (free)*, where outside control was removed in 21.1: markers come from Resolve's marker EDL export, voices from the clip's file, and takes go in by pasting one line into Resolve's Console.
 
 **Known limits**
-- Not yet tried against a real copy of Resolve: built against Resolve's documented scripting API, and tested with simulated Resolve on both routes. Please report anything that misbehaves.
-- The Scripts-menu route assumes the free edition still runs Lua scripts from Workspace → Scripts.
+- Confirmed on Resolve 21.1.1 (free): takes into the edit through the Console. Not yet confirmed on real Resolve: the Studio route, and markers from an EDL. Both are tested against a simulated Resolve.
 
 ## 0.3.0 — first public release (beta)
 
