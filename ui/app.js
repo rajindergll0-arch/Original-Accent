@@ -325,6 +325,11 @@ function pageVoice() {
       <div style="margin:.9rem .9rem 0"><label class="switch"><input type="checkbox" id="consent" ${S.consent ? "checked" : ""}><span>I have the speaker's permission to clone their voice<br><span class="note">Required before adding a recording. Cloning someone's voice without consent can be unlawful and harmful.</span></span></label></div>
       <div class="drop ${S.consent ? "" : "locked"}" id="drop" style="margin:.9rem">${S.consent ? "Drop an audio or video file here" : "Tick the permission box to add a recording"}<br><span class="small">Up to 3 hours of audio, or 4 GB</span><br>
         <label class="btn" style="margin-top:.5rem" ${S.consent ? "" : 'aria-disabled="true"'}>Choose file<input type="file" id="file" accept="audio/*,video/*" hidden ${S.consent ? "" : "disabled"}></label></div>
+      ${rOn() ? `<div style="margin:0 .9rem .9rem;display:flex;flex-direction:column;gap:.5rem"><strong class="small">Or take it from DaVinci Resolve</strong>
+        <div class="row" style="gap:.5rem"><button class="btn sm" style="flex:1" data-act="r-voice" data-which="selected" ${S.consent && !S.rwait && !S.rbusy ? "" : "disabled"}>Selected clip</button>
+        <button class="btn sm" style="flex:1" data-act="r-voice" data-which="playhead" ${S.consent && !S.rwait && !S.rbusy ? "" : "disabled"}>Clip at playhead</button></div>
+        <span class="note">Uses the Media Pool clip's In and Out marks, or the part of the clip used in the edit, and picks the cleanest section inside it.</span>
+        ${rWait(["clip"])}</div>` : ""}
       <div class="list">${S.boot.voices.map((x) => `<button class="item" data-voice="${x.id}" aria-selected="${x.id === S.voiceId}">
         <span class="dot" style="background:var(--ref)"></span><span class="grow"><strong class="trunc" title="${esc(x.name)}">${esc(x.name)}</strong><span class="small mute trunc">${x.duration}s · ${x.transcript ? "transcript ready" : "needs transcript"}</span></span></button>`).join("") || `<p class="note" style="padding:0 1rem">No voices yet.</p>`}</div>
     </div>
@@ -339,7 +344,7 @@ function pageVoice() {
           <div class="field"><label for="te">End (s)</label><input class="input mono" id="te" type="number" step="0.1" min="0" value="${T.e}" style="width:7.5rem"></div>
           <button class="btn ${changed ? "primary" : ""}" data-act="trim" style="align-self:flex-end">Apply section</button>
           <span class="note" id="tsel" style="align-self:flex-end">${trimNote(T)}</span></div>
-        <p class="note" style="margin:0">${T.reason ? `Suggested: ${esc(T.reason)}. Listen, adjust the handles if needed, then apply.` : v.auto_trimmed ? "This recording was long, so Original Accent picked the cleanest section for you. Listen, adjust if needed." : "Drag the handles on the waveform, type times, or let Original Accent suggest the cleanest section. Click the waveform to jump; scroll over it to step through."}</p>
+        <p class="note" style="margin:0">${T.reason ? `Suggested: ${esc(T.reason)}. Listen, adjust the handles if needed, then apply.` : v.auto_trimmed && v.from_resolve ? `Taken from Resolve, using ${esc(v.from_resolve)}. Original Accent picked the cleanest section inside it. Listen, adjust if needed.` : v.auto_trimmed ? "This recording was long, so Original Accent picked the cleanest section for you. Listen, adjust if needed." : "Drag the handles on the waveform, type times, or let Original Accent suggest the cleanest section. Click the waveform to jump; scroll over it to step through."}</p>
       </div>
       <div class="panel" style="display:flex;flex-direction:column;gap:.7rem">
         <div class="row"><strong>Reference used for cloning</strong><span class="spacer"></span><span class="mono small mute">${v.duration} s</span></div>
@@ -356,6 +361,57 @@ function pageVoice() {
       </div></div>` : `<div class="panel note">Add a voice to begin.</div>`}</div></div>`;
 }
 function updateTrimFields() { const T = S.trim; if (!T) return; const a = $("#ts"), b = $("#te"); if (a) a.value = T.s; if (b) b.value = T.e; const n = $("#tsel"); if (n) n.textContent = trimNote(T); }
+
+/* ---------------- DaVinci Resolve ----------------
+   Studio: one click, the app drives Resolve directly. Free: the operator runs one of Original
+   Accent's items from Resolve's Workspace > Scripts menu, and the page waits for its answer. */
+function rOn() { const r = S.boot.resolve || {}; return r.installed && r.mode !== "off"; }
+function rFree() { return S.boot.resolve?.mode === "free"; }
+async function rStart(name, args, done, busyText) {
+  if (!rFree()) { S.rbusy = busyText; render(); }
+  try {
+    const r = await api(name, { ...args, route: S.boot.resolve.mode });
+    if (r && r.waiting) { S.rwait = { ...r, args, done }; return; }
+    await done(r);
+  } finally { S.rbusy = null; render(); }
+}
+setInterval(async () => {
+  const w = S.rwait;
+  if (!w || w.checking) return;
+  w.checking = true;
+  try {
+    const r = w.kind === "result" ? await api("resolve_result", { since: w.since })
+      : await api("resolve_inbox", { kind: w.kind, since: w.since, consent: w.args?.consent ? 1 : 0 });
+    if (r && S.rwait === w) { S.rwait = null; await w.done(r); render(); }
+  } catch (e) { if (S.rwait === w) { S.rwait = null; render(); } showError(e.message); }
+  finally { w.checking = false; }
+}, 1000);
+function rWait(kinds) {
+  const w = S.rwait;
+  if (w && kinds.includes(w.kind)) return `<div class="panel rwait" style="display:flex;flex-direction:column;gap:.6rem"><div class="row"><span class="tally on"></span><strong>Waiting for Resolve</strong></div>
+    <p class="note" style="margin:0">In DaVinci Resolve, choose <b>Workspace → Scripts → ${esc(w.menu)}</b>. This page carries on by itself when it's done.</p>
+    <div class="row"><button class="btn sm" data-act="r-cancel">Cancel</button></div></div>`;
+  if (S.rbusy && kinds.includes(S.rbusyKind)) return `<div class="panel rwait"><div class="row"><span class="tally on"></span><strong>${esc(S.rbusy)}</strong></div></div>`;
+  return "";
+}
+function markerParts(m) {
+  const use = m.markers.filter((k) => S.rcolors.has(k.color || "None"));
+  return use.filter((k) => k.note.trim()).map((k) => ({ label: k.name ? `${k.name} · ${k.tc}` : k.tc, text: k.note.trim(), at: { frame: k.frame, tc: k.tc } }));
+}
+function markerPanel() {
+  const m = S.rmark;
+  if (!m) return "";
+  const colors = {};
+  m.markers.forEach((k) => { const c = k.color || "None"; colors[c] = (colors[c] || 0) + 1; });
+  const parts = markerParts(m), use = m.markers.filter((k) => S.rcolors.has(k.color || "None")), empty = use.length - parts.length;
+  const has = draft().parts.some((p) => p.text.trim());
+  return `<div class="panel rwait" style="display:flex;flex-direction:column;gap:.8rem">
+    <div class="row"><strong>Markers from “${esc(m.timeline)}”</strong><span class="spacer"></span><span class="mono small mute">${m.markers.length} marker${m.markers.length === 1 ? "" : "s"}</span></div>
+    ${m.markers.length ? `<div class="row" style="gap:.4rem">${Object.entries(colors).map(([c, n]) => `<button class="btn sm" data-rcolor="${esc(c)}" aria-pressed="${S.rcolors.has(c)}" style="${S.rcolors.has(c) ? "" : "opacity:.55"}"><span class="dot" style="background:${MCOL[c] || "var(--line2)"}"></span>${esc(c)} · ${n}</button>`).join("")}</div>
+    <p class="note" style="margin:0">Each marker's note becomes a part, in timeline order, and remembers where it sits so its take can go back to the same spot. Choose which marker colours to use.${empty > 0 ? ` ${empty} marker${empty === 1 ? " has" : "s have"} no note and will be left out.` : ""}</p>` : `<p class="note" style="margin:0">This timeline has no markers. Add a marker at each line's position, with the line in the marker's note, then try again.</p>`}
+    <div class="row"><button class="btn primary" data-act="r-use-markers" ${parts.length ? "" : "disabled"}>${has ? "Replace the script with" : "Use"} ${parts.length} part${parts.length === 1 ? "" : "s"}</button><button class="btn" data-act="r-close-markers">Cancel</button></div></div>`;
+}
+const MCOL = { Blue: "#4a8cff", Cyan: "#3cd6e0", Green: "#3ecf6e", Yellow: "#f2d33c", Red: "#ff5a52", Pink: "#ff7ad1", Purple: "#a77bff", Fuchsia: "#e05ce6", Rose: "#ff9aa8", Lavender: "#c3b5ff", Sky: "#8fd3ff", Mint: "#7ef0c0", Lemon: "#fff27a", Sand: "#d9c28c", Cocoa: "#9c6b4a", Cream: "#f5ecd6" };
 
 /* ---------------- Script ---------------- */
 function draft() {
@@ -384,8 +440,12 @@ function pageScript() {
       <button class="btn primary" data-act="generate">Generate takes</button>
       ${S.boot.jobs.length ? `<div class="field"><label>Open an earlier job</label><div class="list">${S.boot.jobs.slice(0, 6).map((j) => `<button class="item" data-job="${j.id}"><span class="grow"><span class="trunc" title="${esc(j.name)}">${esc(j.name)}</span><span class="small mute trunc">${esc(j.created.replace("T", " "))} · ${j.parts} part(s)</span></span></button>`).join("")}</div></div>` : ""}
     </div>
-    <div style="display:flex;flex-direction:column;gap:1rem">${d.parts.map((p, i) => `<div class="panel" style="display:flex;flex-direction:column;gap:.6rem">
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      ${rOn() && !S.rmark ? `<div class="row"><button class="btn" data-act="r-markers" ${S.rwait || S.rbusy ? "disabled" : ""}>Script from Resolve markers</button><span class="note">Each marker's note on the current timeline becomes a part.</span></div>` : ""}
+      ${rWait(["markers"])}${markerPanel()}
+      ${d.parts.map((p, i) => `<div class="panel" style="display:flex;flex-direction:column;gap:.6rem">
       <div class="row"><input class="input" data-plabel="${i}" value="${esc(p.label)}" style="max-width:16rem;min-width:8rem;flex:1"><span class="spacer"></span>
+      ${p.at ? `<span class="tag mono" title="Goes back to this point on the Resolve timeline">⌖ ${esc(p.at.tc)}</span>` : ""}
       ${p.group ? `<span class="tag" style="color:var(--words)" title="Chunk of “${esc(p.group)}”; ends ${p.brk === "para" ? "a paragraph" : "mid-paragraph"}">${p.brk === "para" ? "¶ end" : "mid ¶"}</span>` : ""}
       <span class="mono small mute" data-wc="${i}">${wcText(p.text)}</span>
       ${words(p.text) > chunkTarget(d.include_chatterbox) ? `<button class="btn sm" data-split="${i}" title="Split at paragraph and sentence ends into chunks of about ${chunkTarget(d.include_chatterbox)} words">Auto-split</button>` : ""}
@@ -610,9 +670,25 @@ function pageDeliver() {
       <label class="switch"><input type="checkbox" id="xsep" ${o.separate ? "checked" : ""}><span>Separate file for each part</span></label>
       <label class="switch"><input type="checkbox" id="xjoin" ${o.joined ? "checked" : ""}><span>One joined file of the whole piece<br><span class="note">Trims silence at each part's edges, matches loudness across parts, and adds a short pause inside a paragraph, a longer one at a paragraph end, and a longer one again between separate parts.${all ? "" : " Needs a pick for every part."}</span></span></label>
       <div class="row"><button class="btn primary" data-act="export" ${nPicked && (o.separate || o.joined) ? "" : "disabled"}>Export</button></div></div>
+    ${rOn() ? sendPanel(nPicked) : ""}
     ${many ? longGuide(false) : ""}
     ${S.exportResult ? `<div class="panel"><div class="row"><span class="dot" style="background:var(--voice)"></span><strong>Exported ${S.exportResult.files.length} file(s)</strong><span class="spacer"></span><button class="btn" data-act="open-dir">Open folder</button></div>
       <div class="mono small mute wrap" style="margin-top:.6rem">${S.exportResult.files.map(esc).join("<br>")}</div></div>` : ""}</div>`;
+}
+
+function sendPanel(nPicked) {
+  const j = S.job, hasAt = j.parts.some((p) => p.at), many = j.parts.length > 1;
+  if (!S.rplace || (S.rplace === "markers" && !hasAt)) S.rplace = hasAt ? "markers" : "none";
+  const opt = (v, title, note, off) => `<label class="switch"><input type="radio" name="rplace" value="${v}" ${S.rplace === v ? "checked" : ""} ${off ? "disabled" : ""}><span>${title}<br><span class="note">${note}</span></span></label>`;
+  const r = S.rsent;
+  return `<div class="panel" style="display:flex;flex-direction:column;gap:.8rem"><strong>Send to DaVinci Resolve</strong>
+    ${opt("none", "Import into the Media Pool only", "Into a bin called Original Accent › " + esc(j.name) + ". Nothing is put on the timeline.")}
+    ${opt("playhead", "Place at the playhead", many ? "The joined file goes on a new audio track, starting at the playhead. Needs a pick for every part." : "The picked take goes on a new audio track, starting at the playhead.")}
+    ${opt("markers", "Place at their markers", hasAt ? "Each picked part goes back to the marker it came from, on a new audio track. A take that runs into the next one goes on a second new track, so nothing overlaps." : "Only for scripts made from Resolve markers.", !hasAt)}
+    <p class="note" style="margin:0">Takes always go on new tracks named Original Accent, never on top of your existing audio. The files are also saved to the export folder.</p>
+    <div class="row"><button class="btn primary" data-act="r-send" ${nPicked && !S.rwait && !S.rbusy ? "" : "disabled"}>Send to Resolve</button>
+      ${r ? `<span class="small"><span class="dot" style="background:var(--voice)"></span> ${esc(r)}</span>` : ""}</div>
+    ${rWait(["result", "send"])}</div>`;
 }
 
 /* play every picked part in order with the joined file's pauses */
@@ -657,6 +733,7 @@ function pageSettings() {
       <div class="erows">${Object.entries(e).map(([n, x]) => `<div class="erow"><span class="row" style="flex-wrap:nowrap;gap:.6rem"><span class="dot" style="background:${x.installed ? "var(--voice)" : "var(--line2)"}"></span><span class="trunc">${esc(x.title)}</span></span>
         <div class="estat">${engStatus(n)}</div>
         <button class="btn sm" data-install="${n}" ${busy ? "disabled" : ""}>${x.installed ? "Repair" : "Install"}</button></div>`).join("")}</div></div>
+    ${resolvePanel()}
     ${updatesPanel(busy)}
     <p class="note">Original Accent runs entirely on this PC. Only clone voices you have permission to use.</p></div>`;
 }
@@ -683,6 +760,18 @@ function previewHTML(skin) {
 }
 function fitPreviews() { document.querySelectorAll(".pvwrap").forEach((w) => { const pv = w.firstElementChild; if (pv) { pv.dataset.live = "style"; pv.style.transform = `scale(${w.clientWidth / 1280})`; } }); }
 
+function resolvePanel() {
+  const r = S.boot.resolve || {}, live = S.rlive;
+  if (!r.installed) return `<div class="panel" style="display:flex;flex-direction:column;gap:.5rem"><strong>DaVinci Resolve</strong><span class="note">Resolve isn't installed on this PC. If you install it later, Original Accent can take voices and scripts from it and put takes straight into your edit.</span></div>`;
+  const opt = (v, title, note) => `<label class="switch"><input type="radio" name="rmode" value="${v}" ${r.mode === v ? "checked" : ""}><span>${title}<br><span class="note">${note}</span></span></label>`;
+  return `<div class="panel" style="display:flex;flex-direction:column;gap:.8rem"><strong>DaVinci Resolve</strong>
+    <span class="note">Take a voice from a clip, turn timeline markers into a script, and send picked takes into the edit.</span>
+    ${opt("studio", "Resolve Studio: direct", "Original Accent controls Resolve itself, one click each time. In Resolve, set Preferences → System → General → External scripting using to <b>Local</b>.")}
+    ${opt("free", "Resolve (free) or Studio: through Resolve's Scripts menu", "From Resolve 21.1, the free edition can't be controlled from outside. Instead, Original Accent adds its own items to Resolve's <b>Workspace → Scripts</b> menu, and you run one when this app asks. Restart Resolve once after choosing this so the items appear.")}
+    ${opt("off", "Off", "Hide the Resolve buttons.")}
+    ${r.mode === "studio" ? `<div class="row"><button class="btn sm" data-act="r-test">Test connection</button>${live ? `<span class="small ${live.ok ? "" : "wrap"}">${live.ok ? `<span class="dot" style="background:var(--voice)"></span> ${esc(live.product)} ${esc(live.version)} · ${esc(live.project || "no project")}${live.timeline ? ` · ${esc(live.timeline)}` : ""}` : `<span style="color:#ff7a6e">${esc(live.error)}</span>`}</span>` : ""}</div>` : ""}
+    ${r.mode === "free" ? `<div class="note">${r.scripts ? "Menu items installed" : "Menu items not installed yet"} in <span class="mono small wrap">${esc(r.scripts_folder)}</span>${r.scripts_error ? ` <span style="color:#ff7a6e">${esc(r.scripts_error)}</span>` : ""}</div>` : ""}</div>`;
+}
 function updatesPanel(busy) {
   const u = S.updates, s = S.boot.settings;
   const rows = u ? Object.entries(u.engines || {}).map(([n, e]) => {
@@ -841,9 +930,14 @@ document.addEventListener("click", (ev) => guard(async () => {
   else if (d.split != null) { const n = splitPart(+d.split); toast(n ? `Split into ${n} chunks at paragraph and sentence ends.` : "This part can't be split any further."); render(); }
   else if (d.merge != null) { mergeGroup(d.merge); render(); }
   else if (d.eng) { /* checkbox inside label */ }
-  else if (d.act) await act(d.act);
+  else if (d.rcolor != null) { S.rcolors.has(d.rcolor) ? S.rcolors.delete(d.rcolor) : S.rcolors.add(d.rcolor); render(); }
+  else if (d.act) await act(d.act, b);
 }));
-async function act(a) {
+function sentText(r) {
+  const n = r.placed?.length || 0;
+  return `${r.imported} file${r.imported === 1 ? "" : "s"} imported to ${r.bin}` + (n ? `, ${n} placed on ${r.tracks.length > 1 ? `${r.tracks.length} new tracks` : "a new track"}${r.timeline ? ` in “${r.timeline}”` : ""}.` : ".");
+}
+async function act(a, el) {
   const v = curVoice();
   if (a === "skip-setup") { S.setupDismissed = true; render(); }
   else if (a === "install") { const sel = Object.entries(setupSel()).filter(([n, on]) => on || n === "qwen").map(([n]) => n); await api("setup_install", { engines: sel }); S.run = await api("run_state"); render(); }
@@ -873,6 +967,37 @@ async function act(a) {
   else if (a === "play-all") { if (S.seq) stopAll(); else playAll(); }
   else if (a === "export") { const o = exportOpts(); S.exportResult = await api("job_export", { id: S.jobId, separate: o.separate, joined: o.joined }); render(); }
   else if (a === "open-dir") { await api("open_folder", { path: S.exportResult.folder }); }
+  else if (a === "r-cancel") { S.rwait = null; render(); }
+  else if (a === "r-voice") {
+    if (!S.consent) throw new Error("Tick “I have the speaker's permission to clone their voice” first.");
+    S.rbusyKind = "clip";
+    await rStart("resolve_clip", { which: el.dataset.which, consent: 1 }, async (v) => {
+      S.boot.voices = await api("voices"); S.voiceId = v.id; S.trim = null; S.consent = false;
+      toast(`Added “${v.name}” from Resolve, using ${v.from_resolve}.`);
+    }, "Getting the clip from Resolve…");
+  }
+  else if (a === "r-markers") {
+    S.rbusyKind = "markers";
+    await rStart("resolve_markers", {}, (m) => {
+      S.rmark = m; S.rcolors = new Set(m.markers.filter((k) => k.note.trim()).map((k) => k.color || "None"));
+    }, "Reading the timeline's markers…");
+  }
+  else if (a === "r-close-markers") { S.rmark = null; render(); }
+  else if (a === "r-use-markers") {
+    const d = draft(), parts = markerParts(S.rmark);
+    d.parts = parts; d.resolve = { timeline: S.rmark.timeline, fps: S.rmark.fps };
+    if (!d.name) d.name = S.rmark.timeline;
+    toast(`Made ${parts.length} part${parts.length === 1 ? "" : "s"} from the markers on “${S.rmark.timeline}”.`); S.rmark = null; render();
+  }
+  else if (a === "r-send") {
+    S.rsent = null; S.rbusyKind = "send";
+    const free = rFree(), since = Date.now() / 1000;
+    await rStart("resolve_send", { id: S.jobId, place: S.rplace }, async (r) => {
+      if (r.done === false) { S.rwait = { kind: "result", menu: r.menu, since, done: (x) => { S.rsent = sentText(x); toast("Takes are in Resolve."); } }; return; }
+      S.rsent = sentText(r); toast("Takes are in Resolve.");
+    }, "Sending to Resolve…");
+  }
+  else if (a === "r-test") { S.rlive = (await api("resolve_status", { live: 1 })).live; render(); }
 }
 function replaceVoice(nv) { S.boot.voices = S.boot.voices.map((x) => (x.id === nv.id ? nv : x)); }
 async function saveVoice() { const v = curVoice(); if (!v) return; const nv = await api("voice_update", { id: v.id, name: $("#vname").value, transcript: $("#vtx").value }); replaceVoice(nv); }
@@ -903,6 +1028,8 @@ document.addEventListener("change", (ev) => guard(async () => {
   else if (t.id === "dfree") S.boot.settings = await api("settings_save", { free_gpu_before_run: t.checked });
   else if (t.id === "xsep" || t.id === "xjoin") { exportOpts()[t.id === "xsep" ? "separate" : "joined"] = t.checked; render(); }
   else if (t.id === "dupd") S.boot.settings = await api("settings_save", { check_updates: t.checked });
+  else if (t.name === "rplace") { S.rplace = t.value; S.rsent = null; render(); }
+  else if (t.name === "rmode") { S.boot.settings = await api("settings_save", { resolve_mode: t.value }); S.rlive = null; S.boot.resolve = await api("resolve_status", {}); render(); }
   else if (t.id === "vname" || t.id === "vtx") await saveVoice();
   else if (t.id === "file") await upload(t.files[0]);
 }));

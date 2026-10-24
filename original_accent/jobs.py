@@ -144,15 +144,18 @@ def voice(vid):
     return read_json(VOICES / vid / "voice.json")
 
 
-def add_voice(name, filename, upload, consent=False):
-    """upload: a file already streamed to disk by the server (never held in memory)."""
+def add_voice(name, filename, upload, consent=False, copy=False, span=None):
+    """upload: a file already streamed to disk by the server (never held in memory).
+    copy: leave `upload` where it is (a file the editor's project still uses).
+    span: [start, end] seconds the cleanest section should come from (a Resolve clip's marks)."""
     if not consent:
-        Path(upload).unlink(missing_ok=True)
+        if not copy:
+            Path(upload).unlink(missing_ok=True)
         raise RuntimeError("Confirm you have the speaker's permission before adding a recording.")
     vid = new_id("v")
     d = VOICES / vid; d.mkdir(parents=True)
     src = d / ("source" + (Path(filename).suffix.lower() or ".wav"))
-    shutil.move(str(upload), src)
+    (shutil.copy2 if copy else shutil.move)(str(upload), src)
     try:
         if paths.DEMO:
             _demo_wav(d / "full.wav", 7, 24.0)
@@ -179,8 +182,14 @@ def add_voice(name, filename, upload, consent=False):
          "trim": None, "full_duration": full, "duration": full, "auto_trimmed": False,
          "consent": {"confirmed": bool(consent), "at": now()}}
     write_json(d / "voice.json", v)
-    if full > 15:                              # too long to clone from: start from the best section
-        s, e = suggest_trim(vid)["trim"]
+    if span:
+        span = [max(0.0, float(span[0])), min(full, float(span[1]))]
+        if span[1] - span[0] < 0.5:
+            span = None
+    if span and span[1] - span[0] <= 15:       # the editor's own range is short enough: use it as is
+        v = update_voice(vid, {"trim": span}); v["auto_trimmed"] = True; write_json(d / "voice.json", v)
+    elif full > 15 or span:                    # too long to clone from: start from the best section
+        s, e = suggest_trim(vid, span=span)["trim"]
         v = update_voice(vid, {"trim": [s, e]})
         v["auto_trimmed"] = True
         write_json(d / "voice.json", v)
@@ -200,14 +209,18 @@ def ensure_full(vid):
     return d / "full.wav"
 
 
-def suggest_trim(vid, lo=6.0, hi=15.0, target=11.0):
+def suggest_trim(vid, lo=6.0, hi=15.0, target=11.0, span=None):
     """Find the cleanest stretch to clone from: continuous speech, a quiet floor, no clipping,
     starting and ending in a pause so no word is cut, as close to ~11 s as the clip allows.
     Energy-based voice activity on 20 ms frames; every candidate window runs pause to pause."""
     db, clip, sr, total_s = frame_levels(ensure_full(vid))
+    off = 0.0
+    if span:                                   # only look inside this stretch (20 ms frames)
+        a, b = int(span[0] * 50), int(span[1] * 50)
+        db, clip, off = db[a:b], clip[a:b], a / 50
     n = len(db)
     if n < 10:
-        return {"trim": [0.0, round(total_s, 2)], "reason": "Clip is very short."}
+        return {"trim": [round(off, 2), round(off + n / 50 if span else total_s, 2)], "reason": "Clip is very short."}
     floor = np.percentile(db, 10); speech = db > max(floor + 12, db.max() - 45)
     k = 5; sm = np.convolve(speech.astype(float), np.ones(k) / k, mode="same") > 0.4   # bridge tiny gaps
     # pauses: runs of >= 0.18 s non-speech; their midpoints are allowed cut points
@@ -238,7 +251,7 @@ def suggest_trim(vid, lo=6.0, hi=15.0, target=11.0):
         w = int(min(target, n / fps) * fps)
         sums = np.convolve(sm.astype(float), np.ones(w), mode="valid")
         i = int(sums.argmax()); best = (i, i + w, sums[i] / w)
-    s, e = max(0.0, best[0] / fps - 0.05), min(n / fps, best[1] / fps + 0.05)
+    s, e = off + max(0.0, best[0] / fps - 0.05), off + min(n / fps, best[1] / fps + 0.05)
     return {"trim": [round(s, 2), round(e, 2)], "speech": round(float(best[2]), 2),
             "reason": f"{e - s:.1f} s, {int(best[2] * 100)}% speech, cut at pauses"}
 
@@ -319,7 +332,8 @@ def create_job(spec):
     # group/brk come from auto-split: chunks of one piece share a group; brk says whether the
     # chunk ends a paragraph ("para") or mid-paragraph ("sentence"), which sets the pause when joined
     parts = [{"label": p.get("label") or f"Part {i + 1}", "text": p["text"],
-              **({"group": p["group"]} if p.get("group") else {}), **({"brk": p["brk"]} if p.get("brk") else {})}
+              **({"group": p["group"]} if p.get("group") else {}), **({"brk": p["brk"]} if p.get("brk") else {}),
+              **({"at": {"frame": int(p["at"]["frame"]), "tc": p["at"].get("tc", "")}} if p.get("at") else {})}
              for i, p in enumerate(spec["parts"]) if p.get("text", "").strip()]
     if not parts:
         raise ValueError("The script is empty.")
@@ -327,7 +341,7 @@ def create_job(spec):
          "takes_per_part": int(spec.get("takes_per_part", s["takes_per_part"])),
          "include_chatterbox": bool(spec.get("include_chatterbox", s["include_chatterbox"])) and engines.ready("cbx"),
          "chatterbox_configs": spec.get("chatterbox_configs", s["chatterbox_configs"]),
-         "created": now(), "picks": {}}
+         "created": now(), "picks": {}, **({"resolve": spec["resolve"]} if spec.get("resolve") else {})}
     j["takes"] = plan(j)
     (JOBS / jid / "takes").mkdir(parents=True)
     write_json(JOBS / jid / "job.json", j)
@@ -464,14 +478,14 @@ def export(jid, dest=None, separate=True, joined=False):
     a paragraph, longer at a paragraph end, longest between separate parts."""
     j = job(jid); dest = Path(dest or paths.settings()["export_dir"]) / slug(j["name"])
     dest.mkdir(parents=True, exist_ok=True)
-    out = []
+    out, by_part, joined_file = [], {}, None
     picks = sorted(((int(k), v) for k, v in j["picks"].items()), key=lambda kv: kv[0])
     if separate:
         for part, tid in picks:
             t = next(x for x in j["takes"] if x["id"] == tid)
             name = f"{slug(j['name'])}_{slug(j['parts'][part]['label'], 60)}_{t['engine']}-{t['config']}_{slug(t['label'])}.wav"
             shutil.copy2(JOBS / jid / "takes" / f"{tid}.wav", dest / name)
-            out.append(str(dest / name))
+            out.append(str(dest / name)); by_part[part] = str(dest / name)
     if joined:
         missing = [p["label"] for i, p in enumerate(j["parts"]) if str(i) not in j["picks"]]
         if missing:
@@ -494,8 +508,8 @@ def export(jid, dest=None, separate=True, joined=False):
             y = y * (lim / peak)
         name = f"{slug(j['name'])}_complete.wav"
         tmp = dest / (name + ".part.wav"); sf.write(str(tmp), y, sr); os.replace(tmp, dest / name)
-        out.append(str(dest / name))
-    return {"folder": str(dest), "files": out}
+        out.append(str(dest / name)); joined_file = str(dest / name)
+    return {"folder": str(dest), "files": out, "parts": by_part, "joined": joined_file}
 
 
 # ---------------------------------------------------------------- setup

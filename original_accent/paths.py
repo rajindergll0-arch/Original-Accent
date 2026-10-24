@@ -74,7 +74,7 @@ def read_json(path, default=None):
 DEFAULT_SETTINGS = {"skin": "grade", "ui_scale": 1.0, "takes_per_part": 5,
                     "include_chatterbox": True, "chatterbox_configs": ["default", "low", "turbo"],
                     "export_dir": str(EXPORTS), "free_gpu_before_run": True,
-                    "check_updates": True}
+                    "check_updates": True, "resolve_mode": "studio"}
 
 
 SETTINGS_VERSION = 2   # v2: five Qwen takes per part by default

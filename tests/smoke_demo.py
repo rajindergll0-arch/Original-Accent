@@ -14,14 +14,8 @@ srv = subprocess.Popen([sys.executable, "-m", "original_accent", "--browser"], c
 url = srv.stdout.readline().strip()
 wav = tmp / "speaker.wav"
 sf.write(wav, (np.sin(np.arange(24000 * 20) / 24000 * 2 * np.pi * 150) * 0.2).astype("float32"), 24000)
-CHECK = """()=>{const box=['panel','clip','strip','item','btn','notice','toast','takes','stage','track','scope','tag','field','hero','top','navbtn','erow'];
- const out=[]; const m=document.querySelector('#main'); if(m.scrollWidth>m.clientWidth+2) out.push('sideways scroll');
- for(const el of document.querySelectorAll('#main *')){ if(el.closest('.pv')||!el.offsetParent) continue;
-  if(![...el.childNodes].some(n=>n.nodeType===3&&n.textContent.trim())) continue;
-  const r=el.getBoundingClientRect(); let a=el.parentElement; while(a&&!box.some(c=>a.classList&&a.classList.contains(c))) a=a.parentElement;
-  if(!a||!r.width) continue; const b=a.getBoundingClientRect();
-  if(getComputedStyle(el).textOverflow!=='ellipsis'&&(r.right>b.right+1.5||r.left<b.left-1.5)) out.push(el.textContent.trim().slice(0,40));}
- return out}"""
+sys.path.insert(0, str(Path(__file__).parent))
+from smoke_demo_check import CHECK
 errors, problems = [], {}
 try:
     with sync_playwright() as p:

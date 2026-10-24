@@ -110,6 +110,14 @@ Redraws go through `morph()` in app.js: the new markup is built off-screen and o
 
 Data lives in `%LOCALAPPDATA%\Original Accent`: `engines/` (environments, Hugging Face cache), `voices/<id>/` (source file, `ref.wav` at 24 kHz mono, `voice.json`), `jobs/<id>/` (`job.json`, `takes/*.wav`, `scores.json`, `errors.jsonl`), `logs/`, `settings.json`.
 
+## DaVinci Resolve bridge (0.4.0)
+- `original_accent/resolve.py` plans and routes; `workers/resolve_worker.py` does the Studio route (loads `fusionscript.dll` from the Resolve folder, run as its own process so a crash in Resolve's library can't take the app down); `resolve/*.lua` are the free-edition menu scripts, each installed as one self-contained file (`oa_common.lua` prepended) into `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility`.
+- Why two routes: Resolve 21.1 moved scripting to Studio ("Advanced scripting now requires DaVinci Resolve Studio"), so the free edition can't be driven from outside. The menu scripts run inside Resolve and swap files with the app in `%LOCALAPPDATA%\OriginalAccent\resolve`: `inbox-markers.json`, `inbox-clip.json` (to the app), `outbox.lua` (a Lua table: what to import and where; no JSON parser needed in Lua) and `outbox-result.json`.
+- Frames: marker keys are offsets from the timeline start; `recordFrame` is absolute (`GetStartFrame()` + offset). The playhead comes from `GetCurrentTimecode()`, converted with drop-frame handled. Durations convert at the real rate (23.976, 29.97).
+- Placement never edits existing tracks: each send adds new mono audio tracks named Original Accent; a take that would overlap the previous one goes on a further new track.
+- Tests: `tests/resolve_demo.py` runs both routes end to end: the Studio route against `workers/resolve_fake.py` (demo mode), the free route by running the real Lua scripts in LuaJIT against `tests/resolve_fake.lua`.
+- Not yet verified on real Resolve: Python 3.12 loading `fusionscript.dll` from Resolve 21; `AppendToTimeline` with `mediaType`/`trackIndex`/`recordFrame` on 21.1; Lua menu scripts still running in free 21.1.
+
 ## Install lessons (paid for once; do not rediscover)
 - Install torch and torchaudio from the PyTorch CUDA index, pinned to the exact versions the packages want. Then install everything else against a per-environment constraints file. A shared constraints file polluted installs, and an unpinned resolver pulled a CPU-only torch.
 - Chatterbox needs Python 3.11 and `setuptools<81` (its watermarker imports `pkg_resources`).

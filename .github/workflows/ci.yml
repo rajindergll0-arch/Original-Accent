@@ -18,6 +18,8 @@ jobs:
       - name: Syntax
         run: |
           python -m py_compile original_accent/*.py workers/*.py
+          sudo apt-get update -q && sudo apt-get install -y -q luajit
+          for f in resolve/*.lua; do luajit -bl "$f" > /dev/null || exit 1; done
           node --check ui/app.js
       - name: Install
         run: |
@@ -26,6 +28,10 @@ jobs:
       - name: Demo-mode UI test (simulated engines, every skin)
         timeout-minutes: 10
         run: python tests/smoke_demo.py
+      - name: DaVinci Resolve bridge test (simulated Resolve, both routes)
+        timeout-minutes: 10
+        run: |
+          python tests/resolve_demo.py
       - name: Installer builds
         run: |
           sudo apt-get update && sudo apt-get install -y nsis

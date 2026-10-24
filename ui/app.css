@@ -59,6 +59,8 @@ button{cursor:pointer}
 .brand{font-family:var(--font-display);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 .tally{width:.6rem;height:.6rem;border-radius:50%;background:var(--line2)}
 .tally.on{background:var(--accent);box-shadow:0 0 .8rem var(--accent)}
+.rwait{border-color:var(--accent);background:var(--deep)}
+.rwait .tally{flex:none}
 .navbtn{border:none;background:transparent;color:var(--mute);padding:.7rem 1rem;display:flex;gap:.5rem;align-items:center;border-bottom:2px solid transparent;min-height:2.75rem}
 .navbtn[aria-current=page]{color:var(--text);border-bottom-color:var(--accent)}
 .navbtn .tc{font-family:var(--font-mono);font-size:.75rem;color:var(--accent);display:none}

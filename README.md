@@ -47,6 +47,7 @@ Four interface skins are included (Grade, Reel, Signal, Booth), along with an in
 | Linux with NVIDIA | Runs from source in principle; untested |
 | Recordings in | Anything ffmpeg reads (WAV, MP3, M4A, FLAC, MP4, MOV, MKV…), up to 3 hours or 4 GB |
 | Audio out | WAV, 24 kHz mono |
+| DaVinci Resolve | Studio (direct) and free (through its Scripts menu); see below |
 | Language | English. Qwen3-TTS supports nine more languages, which the app doesn't offer yet. |
 | Disk space | About 30–40 GB for engines and models |
 | Internet | Needed to install and download engines; afterwards it works offline |
@@ -65,6 +66,21 @@ To uninstall, use Windows **Settings → Apps → Original Accent**. It asks whe
 
 ## Long scripts
 Each part is spoken in one go. Qwen3-TTS manages about 2½ minutes (around 350 words) per part, and Chatterbox about 40 seconds (around 90 words). Auto-split breaks longer scripts at paragraph ends first, then sentence ends. Every chunk is cloned from your original recording, so voice, timbre and accent carry through. Pace, energy and loudness can vary between chunks, though, which you'd hear at the joins. The app explains this and helps you listen through the joins before exporting.
+
+## DaVinci Resolve
+Original Accent can work with DaVinci Resolve in both directions:
+- **Voice from a clip:** take the clip selected in the Media Pool (using its In and Out marks) or the clip under the playhead (using the part in the edit). No hunting for the original file.
+- **Script from markers:** put a marker where each line should go, with the line in the marker's note. Each note becomes a part, and remembers its position.
+- **Send to Resolve:** picked takes go into an *Original Accent* bin. They can also go on new audio tracks, starting at the playhead or back at their markers. Your existing tracks are never touched.
+
+Choose how to connect in **Settings → DaVinci Resolve**:
+
+| | Resolve Studio | Resolve (free) |
+|---|---|---|
+| How | Original Accent controls Resolve directly: one click | Original Accent adds items to Resolve's **Workspace → Scripts** menu; you run one when the app asks |
+| Setup | In Resolve, set **Preferences → System → General → External scripting using** to **Local** | Choose the Scripts-menu option in Settings, then restart Resolve once |
+
+From Resolve 21.1, outside programs can't control the free edition, which is why it has its own route. **Status:** built against Resolve's documented scripting API and tested with a simulated Resolve, but not yet against a real copy. Please report anything that misbehaves.
 
 ## Responsible use
 Voice cloning can be misused. Original Accent asks you to confirm you have the speaker's permission before adding any recording, and keeps that confirmation with the voice. Please:

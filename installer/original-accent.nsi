@@ -96,6 +96,7 @@ Section "Original Accent app" SecApp
   File /r /x __pycache__ "..\original_accent"
   File /r /x __pycache__ "..\workers"
   File /r "..\ui"
+  File /r "..\resolve"
   File "..\requirements.txt"
   File "..\README.md"
   File "..\LICENSE"
@@ -177,6 +178,8 @@ Section "Uninstall"
   ; close anything Original Accent is running (the app, an engine install, uv) so its files aren't locked
   nsExec::Exec `powershell -NoProfile -Command "Get-Process | Where-Object { $$_.Path -like '${ROOT}\*' } | Stop-Process -Force"`
   Sleep 1500
+  ; the menu items Original Accent added to DaVinci Resolve (free-edition route)
+  Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\Original Accent - *.lua"
   Delete "$SMPROGRAMS\Original Accent.lnk"
   Delete "$DESKTOP\Original Accent.lnk"
   RMDir /r "$INSTDIR"

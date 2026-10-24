@@ -1,11 +1,11 @@
 """Local-only HTTP API. Bound to 127.0.0.1 with a per-launch token, so other pages on the
 machine cannot drive it. The UI is plain files; the same API works in the app window and in
 a browser (handy for development: OA_DEMO=1 python -m original_accent --browser)."""
-import json, mimetypes, os, secrets, subprocess, sys, threading
+import json, mimetypes, os, secrets, subprocess, sys, threading, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, unquote
-from . import engines, jobs, paths
+from . import engines, jobs, paths, resolve
 from .paths import UI, VOICES, JOBS
 
 TOKEN = secrets.token_urlsafe(16)
@@ -112,11 +112,51 @@ def bg(fn, *a):
     return True
 
 
+def resolve_status(a):
+    s = paths.settings()
+    out = {"installed": resolve.installed(), "scripts": resolve.scripts_installed(), "mode": s["resolve_mode"],
+           "menu": resolve.MENU, "scripts_folder": str(resolve.scripts_dir())}
+    if s["resolve_mode"] == "free" and out["installed"]:
+        try:                                   # keep the menu scripts current with this version
+            resolve.install_scripts(); out["scripts"] = True
+        except Exception as e:
+            out["scripts_error"] = str(e)
+    if a.get("live") and s["resolve_mode"] == "studio":
+        try:
+            out["live"] = resolve.call("status")
+        except Exception as e:
+            out["live"] = {"ok": False, "error": str(e)}
+    return out
+
+
+def wait_for(kind, which=None):
+    """Free route: the operator runs a menu script in Resolve; the page then polls resolve_inbox."""
+    menu = resolve.MENU["markers" if kind == "markers" else which]
+    return {"waiting": True, "kind": kind, "menu": menu, "since": time.time()}
+
+
+def resolve_inbox(a):
+    msg = resolve.take_inbox(a["kind"], float(a["since"]))
+    if msg is None:
+        return None
+    if a["kind"] == "markers":
+        return resolve.markers_result(msg)
+    return resolve.voice_from_clip(msg, bool(a.get("consent")))
+
+
 API = {
     "bootstrap": lambda a: {"settings": paths.settings(), "gpu": engines.gpu_info(), "engines": engines.status(),
                             "voices": jobs.voices(), "jobs": jobs.jobs(), "run": jobs.run_state(), "demo": paths.DEMO,
                             "ollama": engines.ollama_models(), "version": __import__("original_accent").__version__,
-                            "choices": paths.read_json(paths.DATA / "install-choices.json")},
+                            "choices": paths.read_json(paths.DATA / "install-choices.json"), "resolve": resolve_status({})},
+    "resolve_status": lambda a: resolve_status(a),
+    "resolve_install_scripts": lambda a: resolve.install_scripts(),
+    "resolve_markers": lambda a: resolve.markers_result(resolve.call("markers")) if a.get("route") == "studio" else wait_for("markers"),
+    "resolve_clip": lambda a: resolve.voice_from_clip(resolve.call("clip", which=a["which"]), bool(a.get("consent")))
+                              if a.get("route") == "studio" else wait_for("clip", a["which"]),
+    "resolve_inbox": lambda a: resolve_inbox(a),
+    "resolve_send": lambda a: resolve.send(a["id"], a.get("place", "none"), a.get("route", "studio")),
+    "resolve_result": lambda a: resolve.outbox_result(float(a.get("since", 0))),
     "choices_clear": lambda a: (paths.DATA / "install-choices.json").unlink(missing_ok=True),
     "restart": lambda a: restart(),
     "clipboard_get": lambda a: clipboard_get(),
