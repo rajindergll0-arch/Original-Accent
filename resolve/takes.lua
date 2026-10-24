@@ -35,9 +35,10 @@ oa_run("result", function()
   if #(req.place or {}) > 0 then
     local fps = oa_fps(project, tl)
     local here = oa_tc_to_frames(tl:GetCurrentTimecode(), fps)
-    table.sort(req.place, function(a, b) return (a.frame or 0) < (b.frame or 0) end)
+    table.sort(req.place, function(a, b)
+      return (a.frame or (a.tc and oa_tc_to_frames(a.tc, fps)) or 0) < (b.frame or (b.tc and oa_tc_to_frames(b.tc, fps)) or 0) end)
     for _, p in ipairs(req.place) do
-      local start = (p.at == "playhead") and (here + math.floor((p.offset or 0) * fps + 0.5)) or p.frame
+      local start = (p.at == "playhead") and (here + math.floor((p.offset or 0) * fps + 0.5)) or p.frame or oa_tc_to_frames(p.tc, fps)
       local stop = start + math.max(1, math.floor(p.seconds * fps + 0.5))
       local k = nil
       for i, e in ipairs(ends) do if e <= start then k = i; break end end

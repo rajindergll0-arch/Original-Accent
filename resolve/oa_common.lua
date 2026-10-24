@@ -58,8 +58,9 @@ local function oa_save(path, msg)
   return false
 end
 
-local function oa_write(name, msg)
+local function oa_write(name, msg, quiet)
   if oa_save(OA_DIR .. name, msg) then return true end
+  if quiet then return false end
   print("Original Accent: Resolve wouldn't let the script save its answer in " .. OA_DIR ..
         " (io: " .. tostring(io ~= nil) .. ", bmd.writefile: " .. tostring(bmd ~= nil and bmd.writefile ~= nil) .. ").")
   return false
@@ -119,14 +120,25 @@ end
 local function oa_run(kind, fn)
   print("Original Accent: running (" .. kind .. ")…")
   oa_log("start " .. kind)
-  local ok, res = xpcall(fn, function(e) if type(e) == "table" then return e end return { trace = debug.traceback(tostring(e), 2) } end)
+  -- the Console has no `debug` library either, so the handler keeps to plain Lua
+  local ok, res = xpcall(fn, function(e)
+    if type(e) == "table" then return e end
+    local tb = (debug and debug.traceback) and debug.traceback(tostring(e), 2) or tostring(e)
+    return { trace = tb }
+  end)
+  if not ok and type(res) ~= "table" then res = { trace = tostring(res) } end
   local name = kind == "result" and "outbox-result.json" or ("inbox-" .. kind .. ".json")
   if ok then
     res.ok = true
-    if oa_write(name, res) then oa_log("done " .. kind); print("Original Accent: done. Switch back to Original Accent.")
+    if oa_write(name, res, kind == "result") then oa_log("done " .. kind); print("Original Accent: done. Switch back to Original Accent.")
+    elseif kind == "result" then
+      -- the takes are in; only the receipt for the app couldn't be saved (the free Console can't write files)
+      print("Original Accent: done. " .. (res.imported or 0) .. " file(s) imported to " .. tostring(res.bin) ..
+            ((res.placed and #res.placed > 0) and (", " .. #res.placed .. " placed on the timeline.") or "."))
+      print("Original Accent: in Original Accent, press “It's done”.")
     else oa_log("could not write " .. name) end
   else
-    local msg = res.oa or ("Resolve reported a problem: " .. tostring(res.trace))
+    local msg = res.oa or ("Resolve reported a problem: " .. tostring(res.trace or res[1] or "unknown"))
     oa_log("error " .. kind .. ": " .. msg)
     oa_write(name, { ok = false, error = msg })
     print("Original Accent: " .. msg)

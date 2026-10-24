@@ -219,8 +219,9 @@ def op_send(r, a):
         fps = fps_of(project, tl)
         here = tc_to_frames(tl.GetCurrentTimecode(), fps)
         ends = []                                  # last end frame on each new track
-        for p in sorted(a["place"], key=lambda p: p.get("frame") or 0):
-            start = here + round(p.get("offset", 0) * fps) if p.get("at") == "playhead" else int(p["frame"])
+        for p in sorted(a["place"], key=lambda p: p.get("frame") or (tc_to_frames(p["tc"], 24) if p.get("tc") else 0)):
+            start = (here + round(p.get("offset", 0) * fps) if p.get("at") == "playhead"
+                     else int(p["frame"]) if p.get("frame") is not None else tc_to_frames(p["tc"], fps))
             end = start + max(1, round(p["seconds"] * fps))
             k = next((i for i, e in enumerate(ends) if e <= start), None)
             if k is None:

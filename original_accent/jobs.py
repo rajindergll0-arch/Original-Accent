@@ -333,7 +333,7 @@ def create_job(spec):
     # chunk ends a paragraph ("para") or mid-paragraph ("sentence"), which sets the pause when joined
     parts = [{"label": p.get("label") or f"Part {i + 1}", "text": p["text"],
               **({"group": p["group"]} if p.get("group") else {}), **({"brk": p["brk"]} if p.get("brk") else {}),
-              **({"at": {"frame": int(p["at"]["frame"]), "tc": p["at"].get("tc", "")}} if p.get("at") else {})}
+              **({"at": {k: p["at"][k] for k in ("frame", "tc") if p["at"].get(k) is not None}} if p.get("at") else {})}
              for i, p in enumerate(spec["parts"]) if p.get("text", "").strip()]
     if not parts:
         raise ValueError("The script is empty.")

@@ -325,7 +325,8 @@ function pageVoice() {
       <div style="margin:.9rem .9rem 0"><label class="switch"><input type="checkbox" id="consent" ${S.consent ? "checked" : ""}><span>I have the speaker's permission to clone their voice<br><span class="note">Required before adding a recording. Cloning someone's voice without consent can be unlawful and harmful.</span></span></label></div>
       <div class="drop ${S.consent ? "" : "locked"}" id="drop" style="margin:.9rem">${S.consent ? "Drop an audio or video file here" : "Tick the permission box to add a recording"}<br><span class="small">Up to 3 hours of audio, or 4 GB</span><br>
         <label class="btn" style="margin-top:.5rem" ${S.consent ? "" : 'aria-disabled="true"'}>Choose file<input type="file" id="file" accept="audio/*,video/*" hidden ${S.consent ? "" : "disabled"}></label></div>
-      ${rOn() ? `<div style="margin:0 .9rem .9rem;display:flex;flex-direction:column;gap:.5rem"><strong class="small">Or take it from DaVinci Resolve</strong>
+      ${rOn() && rFree() ? `<p class="note" style="margin:0 .9rem .9rem">Using a clip from Resolve (free): drop the clip's original file here. Taking the selected clip straight from Resolve needs Resolve Studio.</p>` : ""}
+      ${rOn() && !rFree() ? `<div style="margin:0 .9rem .9rem;display:flex;flex-direction:column;gap:.5rem"><strong class="small">Or take it from DaVinci Resolve</strong>
         <div class="row" style="gap:.5rem"><button class="btn sm" style="flex:1" data-act="r-voice" data-which="selected" ${S.consent && !S.rwait && !S.rbusy ? "" : "disabled"}>Selected clip</button>
         <button class="btn sm" style="flex:1" data-act="r-voice" data-which="playhead" ${S.consent && !S.rwait && !S.rbusy ? "" : "disabled"}>Clip at playhead</button></div>
         <span class="note">Uses the Media Pool clip's In and Out marks, or the part of the clip used in the edit, and picks the cleanest section inside it.</span>
@@ -396,16 +397,17 @@ setInterval(async () => {
 function rWait(kinds) {
   const w = S.rwait;
   if (w && kinds.includes(w.kind)) return `<div class="panel rwait" style="display:flex;flex-direction:column;gap:.6rem"><div class="row"><span class="tally on"></span><strong>Waiting for Resolve</strong></div>
-    <p class="note" style="margin:0">In DaVinci Resolve, choose <b>Workspace → Scripts → ${esc(w.menu)}</b>. This page carries on by itself when it's done.</p>
-    ${w.console ? `<p class="note" style="margin:0">If nothing happens (Resolve 21.1 free only runs scripts from its Console): open <b>Workspace → Console</b>, paste the line that matches its prompt, and press Enter.</p>
-    ${[["lua", "Lua>"], ["py", "Py3>"]].map(([k, p]) => `<div class="row" style="flex-wrap:nowrap;gap:.5rem"><span class="mono small mute" style="width:2.6rem;flex:none">${p}</span><code class="mono small trunc" style="flex:1;min-width:0;padding:.45rem .6rem;background:var(--panel);border:1px solid var(--line);border-radius:6px" title="${esc(w.console[k])}">${esc(w.console[k])}</code><button class="btn sm" data-act="r-copy" data-lang="${k}">Copy</button></div>`).join("")}` : ""}
+    <p class="note" style="margin:0">In DaVinci Resolve, open <b>Workspace → Console</b>, paste the line that matches its prompt, and press Enter.</p>
+    ${w.console ? [["lua", "Lua>"], ["py", "Py3>"]].map(([k, p]) => `<div class="row" style="flex-wrap:nowrap;gap:.5rem"><span class="mono small mute" style="width:2.6rem;flex:none">${p}</span><code class="mono small trunc" style="flex:1;min-width:0;padding:.45rem .6rem;background:var(--panel);border:1px solid var(--line);border-radius:6px" title="${esc(w.console[k])}">${esc(w.console[k])}</code><button class="btn sm" data-act="r-copy" data-lang="${k}">Copy</button></div>`).join("") : ""}
+    <p class="note" style="margin:0">On versions of Resolve that still run scripts from the menu, <b>Workspace → Scripts → ${esc(w.menu)}</b> does the same.</p>
     ${waitStatus(w)}
-    <div class="row"><button class="btn sm" data-act="r-cancel">Cancel</button></div></div>`;
+    <div class="row">${w.kind === "result" ? `<button class="btn sm primary" data-act="r-done">It's done</button><span class="note">Press when Resolve's Console says done.</span><span class="spacer"></span>` : ""}<button class="btn sm" data-act="r-cancel">Cancel</button></div></div>`;
   if (S.rbusy && kinds.includes(S.rbusyKind)) return `<div class="panel rwait"><div class="row"><span class="tally on"></span><strong>${esc(S.rbusy)}</strong></div></div>`;
   return "";
 }
 function waitStatus(w) {
   const st = w.status;
+  if (w.kind === "result") return "";   // Resolve (free)'s Console can't save a receipt; "It's done" covers it
   if (!st || (!st.ran && !w.slow)) return "";
   if (!st.ran) return `<p class="note" style="margin:0">Nothing from Resolve yet. If you've already chosen the menu item and nothing happened, open <b>Workspace → Console</b> in Resolve: it shows what the script said.</p>`;
   const last = (st.tail[st.tail.length - 1] || "").replace(/^\S+ \S+\s+/, "");
@@ -460,7 +462,9 @@ function pageScript() {
       ${S.boot.jobs.length ? `<div class="field"><label>Open an earlier job</label><div class="list">${S.boot.jobs.slice(0, 6).map((j) => `<button class="item" data-job="${j.id}"><span class="grow"><span class="trunc" title="${esc(j.name)}">${esc(j.name)}</span><span class="small mute trunc">${esc(j.created.replace("T", " "))} · ${j.parts} part(s)</span></span></button>`).join("")}</div></div>` : ""}
     </div>
     <div style="display:flex;flex-direction:column;gap:1rem">
-      ${rOn() && !S.rmark ? `<div class="row"><button class="btn" data-act="r-markers" ${S.rwait || S.rbusy ? "disabled" : ""}>Script from Resolve markers</button><span class="note">Each marker's note on the current timeline becomes a part.</span></div>` : ""}
+      ${rOn() && !S.rmark && !rFree() ? `<div class="row"><button class="btn" data-act="r-markers" ${S.rwait || S.rbusy ? "disabled" : ""}>Script from Resolve markers</button><span class="note">Each marker's note on the current timeline becomes a part.</span></div>` : ""}
+      ${rOn() && !S.rmark && rFree() ? `<div class="panel" style="display:flex;flex-direction:column;gap:.6rem"><div class="row"><label class="btn">Script from a Resolve marker list…<input type="file" id="edl" accept=".edl,.txt" hidden></label></div>
+        <span class="note">Each marker's note becomes a part. In Resolve, right-click the timeline in the Media Pool and choose <b>Timelines → Export → Timeline Markers to EDL</b>, then choose that file here.</span></div>` : ""}
       ${rWait(["markers"])}${markerPanel()}
       ${d.parts.map((p, i) => `<div class="panel" style="display:flex;flex-direction:column;gap:.6rem">
       <div class="row"><input class="input" data-plabel="${i}" value="${esc(p.label)}" style="max-width:16rem;min-width:8rem;flex:1"><span class="spacer"></span>
@@ -786,7 +790,7 @@ function resolvePanel() {
   return `<div class="panel" style="display:flex;flex-direction:column;gap:.8rem"><strong>DaVinci Resolve</strong>
     <span class="note">Take a voice from a clip, turn timeline markers into a script, and send picked takes into the edit.</span>
     ${opt("studio", "Resolve Studio: direct", "Original Accent controls Resolve itself, one click each time. In Resolve, set Preferences → System → General → External scripting using to <b>Local</b>.")}
-    ${opt("free", "Resolve (free) or Studio: through Resolve's Scripts menu", "From Resolve 21.1, the free edition can't be controlled from outside. Instead, Original Accent adds its own items to Resolve's <b>Workspace → Scripts</b> menu, and you run one when this app asks. Where the free edition won't run them from the menu, the app gives you a one-line command to paste into Resolve's Console instead. Restart Resolve once after choosing this so the menu items appear.")}
+    ${opt("free", "Resolve (free): a few steps by hand", "From Resolve 21.1, the free edition can't be controlled from outside, so a few steps are by hand: markers come from a marker list you export from Resolve, voices from the clip's file, and takes go in with one line you paste into Resolve's Console.")}
     ${opt("off", "Off", "Hide the Resolve buttons.")}
     ${r.mode === "studio" ? `<div class="row"><button class="btn sm" data-act="r-test">Test connection</button>${live ? `<span class="small ${live.ok ? "" : "wrap"}">${live.ok ? `<span class="dot" style="background:var(--voice)"></span> ${esc(live.product)} ${esc(live.version)} · ${esc(live.project || "no project")}${live.timeline ? ` · ${esc(live.timeline)}` : ""}` : `<span style="color:#ff7a6e">${esc(live.error)}</span>`}</span>` : ""}</div>` : ""}
     ${r.mode === "free" ? `<div class="note">${r.scripts ? "Menu items installed" : "Menu items not installed yet"} in <span class="mono small wrap">${esc(r.scripts_folder)}</span>${r.scripts_error ? ` <span style="color:#ff7a6e">${esc(r.scripts_error)}</span>` : ""}</div>` : ""}</div>`;
@@ -987,6 +991,7 @@ async function act(a, el) {
   else if (a === "export") { const o = exportOpts(); S.exportResult = await api("job_export", { id: S.jobId, separate: o.separate, joined: o.joined }); render(); }
   else if (a === "open-dir") { await api("open_folder", { path: S.exportResult.folder }); }
   else if (a === "r-cancel") { S.rwait = null; render(); }
+  else if (a === "r-done") { S.rwait = null; S.rsent = "Brought into Resolve. Check the Original Accent bin."; render(); }
   else if (a === "r-copy") { const k = el.dataset.lang, t = S.rwait.console[k]; await api("clipboard_set", { text: t }).catch(() => navigator.clipboard?.writeText(t)); toast(`Copied. Paste it into Resolve's Console at the ${k === "lua" ? "Lua>" : "Py3>"} prompt and press Enter.`); }
   else if (a === "r-voice") {
     if (!S.consent) throw new Error("Tick “I have the speaker's permission to clone their voice” first.");
@@ -1052,6 +1057,10 @@ document.addEventListener("change", (ev) => guard(async () => {
   else if (t.name === "rmode") { S.boot.settings = await api("settings_save", { resolve_mode: t.value }); S.rlive = null; S.boot.resolve = await api("resolve_status", {}); render(); }
   else if (t.id === "vname" || t.id === "vtx") await saveVoice();
   else if (t.id === "file") await upload(t.files[0]);
+  else if (t.id === "edl" && t.files[0]) {
+    const f = t.files[0], m = await api("resolve_markers_edl", { text: await f.text(), name: f.name.replace(/\.[^.]+$/, "") });
+    S.rmark = m; S.rcolors = new Set(m.markers.filter((k) => k.note.trim()).map((k) => k.color || "None")); render();
+  }
 }));
 const MAX_UPLOAD = 4 * 1024 ** 3;
 async function upload(f) {

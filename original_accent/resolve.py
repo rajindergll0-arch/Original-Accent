@@ -277,12 +277,40 @@ def tc(frame, fps, df=False):
     return frames_to_tc(int(frame), fps, df)
 
 
+EDL_EVENT = __import__("re").compile(r"^\s*\d+\s+\S+\s+\S+\s+\S+\s+([\d:;]{11})\s+([\d:;]{11})\s+([\d:;]{11})\s+([\d:;]{11})")
+EDL_NOTE = __import__("re").compile(r"^(.*?)\s*\|C:(\S*)\s*\|M:(.*?)\s*\|D:(\d+)\s*$")
+
+
+def markers_from_edl(text, name="Timeline"):
+    """Markers from Resolve's Timeline > Export > Timeline Markers to EDL (works in every edition).
+    Each event's record-in timecode is the marker's position; the line after it reads
+    '<note> |C:ResolveColorBlue |M:<name> |D:<duration>'."""
+    title, out, cur = name, [], None
+    for line in text.splitlines():
+        if line.startswith("TITLE:"):
+            title = line[6:].strip() or name
+            continue
+        m = EDL_EVENT.match(line)
+        if m:
+            cur = {"tc": m.group(3), "color": "", "name": "", "note": ""}
+            out.append(cur)
+            continue
+        n = EDL_NOTE.match(line.strip())
+        if cur is not None and n:
+            cur.update(note=n.group(1).strip(), color=n.group(2).replace("ResolveColor", ""), name=n.group(3).strip())
+    if not out:
+        raise RuntimeError("No markers found in that file. In Resolve, right-click the timeline in the Media Pool and "
+                           "choose Timelines > Export > Timeline Markers to EDL, then choose that file here.")
+    out.sort(key=lambda k: k["tc"].replace(";", ":"))
+    return {"timeline": title, "fps": None, "markers": [k | {"frame": None} for k in out]}
+
+
 def markers_result(m):
     """Normalise a markers message (from either route) for the Script page."""
     fps = float(m.get("fps") or 24)
     out = []
     for k in m.get("markers") or []:
-        frame = int(k["frame"])
+        frame = int(k["frame"]) if k.get("frame") is not None else None
         out.append({"frame": frame, "tc": k.get("tc") or tc(frame, fps, bool(m.get("df"))),
                     "color": k.get("color", ""), "name": k.get("name", ""), "note": k.get("note", "")})
     return {"timeline": m.get("timeline"), "fps": fps, "markers": out}
@@ -329,7 +357,9 @@ def plan_send(jid, place):
                                "Use “At the playhead” or “Import only”.")
         for i, f in ex["parts"].items():
             if i in at:
-                spots.append({"file": f, "frame": int(at[i]["frame"]), "seconds": secs(f)})
+                # markers read from an EDL carry a timecode only; Resolve converts it at the timeline's rate
+                spots.append({"file": f, "seconds": secs(f), **({"frame": int(at[i]["frame"])} if at[i].get("frame") is not None
+                                                                 else {"tc": at[i]["tc"]})})
         files = [s["file"] for s in spots]
     return {"bin": ["Original Accent", j["name"][:60] or "Untitled"], "files": files, "place": spots,
             "track": "Original Accent", "job": j["name"]}

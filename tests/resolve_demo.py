@@ -19,15 +19,19 @@ url = srv.stdout.readline().strip()
 LUA_DIR = data / "demo-appdata" / "Blackmagic Design" / "DaVinci Resolve" / "Support" / "Fusion" / "Scripts" / "Utility"
 
 
-def run_menu(name):
-    """What choosing Workspace > Scripts > <name> in Resolve does."""
+def run_menu(name, sandboxed=False):
+    """What running a menu script in Resolve does. sandboxed: like Resolve 21.1 free's Console,
+    with no io and no bmd.writefile, so nothing can be saved for the app. Returns what was placed."""
     clip = Path(tempfile.gettempdir()) / "oa-demo-interview.wav"
     if not clip.exists():
         shutil.copy(next((data / "voices").glob("*/full.wav")), clip)
-    out = subprocess.run(["luajit", "-e", f'dofile("{ROOT / "tests" / "resolve_fake.lua"}")', str(LUA_DIR / f"{name}.lua")],
+    out = subprocess.run(["luajit", "-e", f'dofile("{ROOT / "tests" / "resolve_fake.lua"}")', "-e",
+                          ("bmd = nil " if sandboxed else "") + f'dofile([[{LUA_DIR / (name + ".lua")}]])', "-e",
+                          'for _, p in ipairs(FAKE_LOG.placed) do print("PLACED " .. p.frame .. " " .. p.track) end'],
                          env=dict(os.environ, OA_BRIDGE_DIR=str(data / "resolve") + "/", OA_TEST_CLIP=str(clip), OA_TEST_NO_IO="1"),
                          capture_output=True, text=True)
     assert "done" in out.stdout, out.stdout + out.stderr
+    return [{"frame": int(l.split()[1]), "track": int(l.split()[2])} for l in out.stdout.splitlines() if l.startswith("PLACED ")]
 
 
 def run_console(line):
@@ -86,31 +90,35 @@ try:
         log = json.loads((data / "demo-resolve.json").read_text())
         assert log["placed"][-1]["frame"] == 86640 and log["placed"][-1]["file"].endswith("_complete.wav"), log["placed"][-1]
 
-        # ---------- Free route
+        # ---------- Free route (Resolve 21.1 free: Console only, no io, no bmd.writefile)
         pg.click("[data-go=settings]"); pg.check("input[name=rmode][value=free]"); pg.wait_for_timeout(500)
         assert (LUA_DIR / "Original Accent - Bring in takes.lua").exists(), "menu scripts not installed"
         problems["settings-free"] = pg.evaluate(CHECK)
-        pg.click("[data-go=voice]"); pg.check("#consent"); pg.click("[data-act=r-voice][data-which=selected]")
-        wait(pg, "!!S.rwait", "waiting box"); problems["voice-waiting"] = pg.evaluate(CHECK); shot(pg, "voice-waiting")
-        run_menu("Original Accent - Send selected clip")
-        wait(pg, "S.boot.voices.length === 2", "voice from the selected clip")
-        v = pg.evaluate("S.boot.voices.find(x=>x.id===S.voiceId)"); assert v["from_resolve"] == "its In and Out marks", v
-        pg.evaluate("api('voice_update',{id:S.voiceId,transcript:'Hello there.'}).then(nv=>{replaceVoice(nv);render()})")
-        pg.click("[data-go=script]"); pg.evaluate("S.draft=null;render()"); pg.click("[data-act=r-markers]")
-        wait(pg, "!!S.rwait", "waiting for markers"); problems["script-waiting"] = pg.evaluate(CHECK)
-        run_console(pg.evaluate("S.rwait.console.py"))
-        wait(pg, "!!S.rmark", "markers through the menu"); pg.click("[data-act=r-use-markers]")
-        assert len(pg.evaluate("draft().parts")) == 3
+        pg.click("[data-go=voice]"); assert not pg.locator("[data-act=r-voice]").count(), "voice buttons shown in free mode"
+        problems["voice-free"] = pg.evaluate(CHECK); shot(pg, "voice-free")
+        pg.click("[data-go=script]"); pg.evaluate("S.draft=null;render()")
+        edl = tmp / "Launch film v3.edl"
+        edl.write_text("TITLE: Launch film v3\nFCM: NON-DROP FRAME\n\n"
+                       "001  001      V     C        01:00:02:00 01:00:02:01 01:00:02:00 01:00:02:01  \n"
+                       "This is the new ROG monitor. |C:ResolveColorBlue |M:Intro |D:1\n\n"
+                       "002  001      V     C        01:00:09:00 01:00:09:01 01:00:09:00 01:00:09:01  \n"
+                       "It runs at five hundred hertz. |C:ResolveColorBlue |M:Marker 2 |D:1\n\n"
+                       "003  001      V     C        01:00:15:00 01:00:15:01 01:00:15:00 01:00:15:01  \n"
+                       " |C:ResolveColorGreen |M:Graphics |D:1\n")
+        problems["script-free"] = pg.evaluate(CHECK); shot(pg, "script-free")
+        pg.set_input_files("#edl", str(edl)); wait(pg, "!!S.rmark", "markers from the EDL")
+        pg.click("[data-act=r-use-markers]")
+        parts = pg.evaluate("draft().parts"); assert [x["at"]["tc"] for x in parts] == ["01:00:02:00", "01:00:09:00"], parts
         pg.click("[data-act=generate]")
         wait(pg, "document.querySelector('.cmp')", "Compare", 240)
         pg.evaluate("(async()=>{for(let i=0;i<S.job.parts.length;i++){S.job=await api('job_pick',{id:S.jobId,part:i,take:S.job.takes.find(t=>t.part===i).id})} render()})()")
         pg.wait_for_timeout(1200); pg.click("[data-go=deliver]"); pg.wait_for_timeout(300)
         pg.check("input[name=rplace][value=markers]")
         pg.click("[data-act=r-send]"); wait(pg, "!!S.rwait", "waiting to bring in takes")
-        problems["deliver-waiting"] = pg.evaluate(CHECK)
-        run_console(pg.evaluate("S.rwait.console.py"))
-        wait(pg, "!!S.rsent", "takes brought in"); sent = pg.evaluate("S.rsent")
-        assert "3 placed" in sent, (sent, pg.evaluate("S.job.picks"), pg.evaluate("S.job.parts"))
+        problems["deliver-waiting"] = pg.evaluate(CHECK); shot(pg, "deliver-waiting")
+        placed = run_menu("Original Accent - Bring in takes", sandboxed=True)
+        assert [p["frame"] for p in placed] == [86448, 86616], placed
+        pg.click("[data-act=r-done]"); assert "Brought into Resolve" in pg.evaluate("S.rsent")
         pg.screenshot(path=str(tmp / "deliver.png"))
         b.close()
 finally:
