@@ -56,8 +56,8 @@ oa_run("result", function()
       placed[#placed + 1] = { frame = start, track = tracks[k] }
     end
   end
-  os.remove(OA_DIR .. "outbox.lua")       -- done: running the menu again won't import twice
-  os.remove(OA_DIR .. "outbox.json")
+  -- done: running it again won't import twice (the app also removes these when it reads the result)
+  pcall(os.remove, OA_DIR .. "outbox.lua"); pcall(os.remove, OA_DIR .. "outbox.json")
   return { id = req.id, imported = n, bin = table.concat(req.bin, "/"), placed = placed, tracks = tracks,
            timeline = tl and tl:GetName() or nil, fps = tl and oa_fps(project, tl) or nil, created = made }
 end)

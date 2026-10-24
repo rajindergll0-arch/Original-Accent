@@ -25,7 +25,7 @@ def run_menu(name):
     if not clip.exists():
         shutil.copy(next((data / "voices").glob("*/full.wav")), clip)
     out = subprocess.run(["luajit", "-e", f'dofile("{ROOT / "tests" / "resolve_fake.lua"}")', str(LUA_DIR / f"{name}.lua")],
-                         env=dict(os.environ, OA_BRIDGE_DIR=str(data / "resolve") + "/", OA_TEST_CLIP=str(clip)),
+                         env=dict(os.environ, OA_BRIDGE_DIR=str(data / "resolve") + "/", OA_TEST_CLIP=str(clip), OA_TEST_NO_IO="1"),
                          capture_output=True, text=True)
     assert "done" in out.stdout, out.stdout + out.stderr
 

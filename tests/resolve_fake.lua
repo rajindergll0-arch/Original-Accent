@@ -49,3 +49,26 @@ local project = obj({ GetCurrentTimeline = function() return current end, GetMed
   SetCurrentTimeline = function(_, t) current = t; return true end,
   GetSetting = function(_, k) return tl:GetSetting(k) end })
 resolve = obj({ GetProjectManager = function() return obj({ GetCurrentProject = function() return project end }) end })
+
+-- Resolve's Console has no `io`; Fusion's bmd.writefile saves a table as Lua text instead.
+-- OA_TEST_NO_IO=1 reproduces that, writing the same kind of file bmd.writefile does.
+if os.getenv("OA_TEST_NO_IO") then
+  local real_io = io
+  local function ser(v, ind)
+    ind = ind or ""
+    if type(v) == "table" then
+      local out, keys = { "{\n" }, {}
+      for k in pairs(v) do keys[#keys + 1] = k end
+      table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+      for _, k in ipairs(keys) do
+        local key = type(k) == "number" and ("[" .. k .. "] = ") or (string.match(k, "^[%a_][%w_]*$") and (k .. " = ") or ("[" .. string.format("%q", k) .. "] = "))
+        out[#out + 1] = ind .. "\t" .. key .. ser(v[k], ind .. "\t") .. ",\n"
+      end
+      out[#out + 1] = ind .. "}"
+      return table.concat(out)
+    elseif type(v) == "string" then return string.format("%q", v)
+    else return tostring(v) end
+  end
+  bmd = { writefile = function(path, t) local f = real_io.open(path, "w"); f:write(ser(t)); f:close(); return true end }
+  io = nil
+end

@@ -38,16 +38,31 @@ local function oa_json(v)
   return "null"
 end
 
-local function oa_write(name, msg)
-  local final, part = OA_DIR .. name, OA_DIR .. name .. ".part"
-  local f = io.open(part, "w")
-  if not f then
-    print("Original Accent: can't write to " .. OA_DIR .. ". Open Original Accent once, then try again.")
-    return false
+-- Saving a message for the app. Resolve's Console has no `io` library, so where it's missing
+-- the message goes through Fusion's own bmd.writefile, which saves a Lua table as text; the app
+-- reads either form.
+local function oa_save(path, msg)
+  if io and io.open then
+    local part = path .. ".part"
+    local f = io.open(part, "w")
+    if f then
+      f:write(oa_json(msg)); f:close()
+      pcall(os.remove, path); pcall(os.rename, part, path)
+      return true
+    end
   end
-  f:write(oa_json(msg)); f:close()
-  os.remove(final); os.rename(part, final)
-  return true
+  if bmd and bmd.writefile then
+    local ok = pcall(bmd.writefile, path, msg)
+    if ok then return true end
+  end
+  return false
+end
+
+local function oa_write(name, msg)
+  if oa_save(OA_DIR .. name, msg) then return true end
+  print("Original Accent: Resolve wouldn't let the script save its answer in " .. OA_DIR ..
+        " (io: " .. tostring(io ~= nil) .. ", bmd.writefile: " .. tostring(bmd ~= nil and bmd.writefile ~= nil) .. ").")
+  return false
 end
 
 local function oa_context(need_timeline)
@@ -91,8 +106,12 @@ end
 
 -- a line per run in script-log.txt, so the app can tell "never ran" from "ran and failed"
 local function oa_log(line)
-  local f = io.open(OA_DIR .. "script-log.txt", "a")
-  if f then f:write(os.date("%Y-%m-%d %H:%M:%S") .. "  " .. line .. "\n"); f:close() end
+  local stamp = (os and os.date) and os.date("%Y-%m-%d %H:%M:%S") or ""
+  if io and io.open then
+    local f = io.open(OA_DIR .. "script-log.txt", "a")
+    if f then f:write(stamp .. "  " .. line .. "\n"); f:close(); return end
+  end
+  oa_save(OA_DIR .. "script-last.txt", { line = stamp .. "  " .. line })   -- no io: keep just the latest line
 end
 
 -- run a menu item: whatever `fn` returns goes to the app as inbox-<kind>.json; a problem goes

@@ -108,6 +108,112 @@ def _lua(v):
     return "{" + ", ".join(f"[{_lua(str(k))}] = {_lua(x)}" for k, x in v.items()) + "}"
 
 
+def lua_table(text):
+    """Parse a Lua table constructor, as Fusion's bmd.writefile saves one:
+    { key = value, ["any key"] = value, [1] = value, value, ... } with strings, numbers,
+    true/false/nil and nested tables. A table whose keys are 1..n becomes a list."""
+    i, n = text.index("{"), len(text)
+
+    def ws():
+        nonlocal i
+        while i < n:
+            if text[i].isspace():
+                i += 1
+            elif text.startswith("--", i):
+                j = text.find("\n", i); i = n if j < 0 else j + 1
+            else:
+                break
+
+    def string():
+        nonlocal i
+        q = text[i]; i += 1; out = []
+        while text[i] != q:
+            c = text[i]
+            if c == "\\":
+                i += 1; c = text[i]
+                if c.isdigit():
+                    j = i
+                    while j < n and j - i < 3 and text[j].isdigit():
+                        j += 1
+                    out.append(chr(int(text[i:j]))); i = j; continue
+                out.append({"n": "\n", "t": "\t", "r": "\r", "a": "\a", "b": "\b", "f": "\f", "v": "\v", "\n": "\n"}.get(c, c))
+            else:
+                out.append(c)
+            i += 1
+        i += 1
+        return "".join(out)
+
+    def value():
+        nonlocal i
+        ws()
+        c = text[i]
+        if c == "{":
+            return table()
+        if c in "\"'":
+            return string()
+        if c == "[" and text[i + 1] in "[=":
+            j = text.index("]]", i); v = text[i + 2:j]; i = j + 2; return v
+        j = i
+        while j < n and (text[j].isalnum() or text[j] in "+-._"):
+            j += 1
+        tok = text[i:j]; i = j
+        if tok == "true": return True
+        if tok == "false": return False
+        if tok == "nil": return None
+        f = float(tok)
+        return int(f) if f.is_integer() and "." not in tok and "e" not in tok.lower() else f
+
+    def table():
+        nonlocal i
+        i += 1; d, pos = {}, 1
+        while True:
+            ws()
+            if text[i] == "}":
+                i += 1; break
+            if text[i] == "[" and text[i + 1] not in "[=":
+                i += 1; k = value(); ws(); i += 1; ws(); i += 1          # [key] =
+                d[k] = value()
+            else:
+                j = i
+                while j < n and (text[j].isalnum() or text[j] == "_"):
+                    j += 1
+                k = text[i:j]; m = j
+                while m < n and text[m].isspace():
+                    m += 1
+                if k and m < n and text[m] == "=" and text[m + 1:m + 2] != "=":
+                    i = m + 1; d[k] = value()
+                else:
+                    d[pos] = value(); pos += 1
+            ws()
+            if i < n and text[i] in ",;":
+                i += 1
+        if d and all(isinstance(k, int) for k in d) and sorted(d) == list(range(1, len(d) + 1)):
+            return [d[k] for k in range(1, len(d) + 1)]
+        return [] if not d else d
+
+    return table()
+
+
+def read_msg(path):
+    """A message a Resolve script saved: JSON (Lua with io, or the Python Console route) or a
+    Lua table (bmd.writefile, where Resolve's Console has no io). None if unreadable yet."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    try:
+        v = lua_table(text)
+        return v if isinstance(v, dict) else None
+    except Exception:
+        return None
+
+
 def write_outbox(req):
     BRIDGE.mkdir(parents=True, exist_ok=True)
     (BRIDGE / "outbox.json").write_text(json.dumps(req), encoding="utf-8")   # for the Console route
@@ -125,10 +231,10 @@ def take_inbox(kind, since):
             best = f
     if not best:
         return None
-    msg = read_json(best)
-    best.unlink(missing_ok=True)
+    msg = read_msg(best)
     if msg is None:
-        return None
+        return None                       # still being written: try again on the next poll
+    best.unlink(missing_ok=True)
     if not msg.get("ok", True):
         raise RuntimeError(msg.get("error") or "The Resolve script reported a problem.")
     return msg
@@ -137,17 +243,26 @@ def take_inbox(kind, since):
 def last_run(since):
     """Whether a menu script has run since `since`, and its last log lines: lets the page say
     "Resolve hasn't run it yet" or show what went wrong, instead of waiting silently."""
-    f = BRIDGE / "script-log.txt"
-    if not f.exists():
+    logs = [f for f in (BRIDGE / "script-log.txt", BRIDGE / "script-last.txt") if f.exists()]
+    if not logs:
         return {"ran": False, "tail": []}
-    lines = f.read_text(encoding="utf-8", errors="replace").splitlines()[-4:]
+    f = max(logs, key=lambda x: x.stat().st_mtime)
+    if f.name == "script-last.txt":           # saved without io: one line, as a Lua table
+        lines = [(read_msg(f) or {}).get("line", "")]
+    else:
+        lines = f.read_text(encoding="utf-8", errors="replace").splitlines()[-4:]
     return {"ran": f.stat().st_mtime >= since - 1, "tail": lines}
 
 
 def outbox_result(since):
     f = BRIDGE / "outbox-result.json"
     if f.exists() and f.stat().st_mtime >= since - 1:
-        msg = read_json(f); f.unlink(missing_ok=True)
+        msg = read_msg(f)
+        if msg is None:
+            return None
+        f.unlink(missing_ok=True)
+        for o in ("outbox.lua", "outbox.json"):      # handled: never import the same takes twice
+            (BRIDGE / o).unlink(missing_ok=True)
         if msg and not msg.get("ok", True):
             raise RuntimeError(msg.get("error") or "Bringing in the takes failed in Resolve.")
         return msg
