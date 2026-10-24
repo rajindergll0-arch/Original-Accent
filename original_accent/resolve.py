@@ -78,9 +78,11 @@ def install_scripts():
 
 
 def console_line(key):
-    """One line for Resolve's Console (Lua): runs the same menu script by hand. Resolve 21.1 free
-    keeps console scripting while the Workspace > Scripts menu needs Studio."""
-    return f"dofile([[{scripts_dir() / (MENU[key] + '.lua')}]])"
+    """One line for Resolve's Console (Py3), doing what the menu item does. Resolve 21.1 free keeps
+    console scripting (with Python built in) while the Workspace > Scripts menu needs Studio."""
+    kind = {"markers": "markers", "selected": "selected", "playhead": "playhead", "takes": "takes"}[key]
+    return (f'import importlib,sys;sys.path.insert(0,r"{WORKERS}");import resolve_console as c;'
+            f'importlib.reload(c);c.run(globals(),"{kind}")')
 
 
 def scripts_installed():
@@ -103,6 +105,7 @@ def _lua(v):
 
 def write_outbox(req):
     BRIDGE.mkdir(parents=True, exist_ok=True)
+    (BRIDGE / "outbox.json").write_text(json.dumps(req), encoding="utf-8")   # for the Console route
     tmp = BRIDGE / "outbox.lua.part"
     tmp.write_text("return " + _lua(req) + "\n", encoding="utf-8")
     os.replace(tmp, BRIDGE / "outbox.lua")

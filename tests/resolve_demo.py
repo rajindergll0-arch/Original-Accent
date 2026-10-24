@@ -30,6 +30,14 @@ def run_menu(name):
     assert "done" in out.stdout, out.stdout + out.stderr
 
 
+def run_console(line):
+    """What pasting the app's line into Resolve's Console (Py3) does, with Resolve's `resolve` object."""
+    code = ("import sys;sys.path.insert(0,%r);from resolve_fake import FakeResolve;resolve=FakeResolve();" % str(ROOT / "workers")) + line
+    out = subprocess.run([sys.executable, "-c", code], env=dict(os.environ, OA_DEMO="1", OA_DATA=str(data),
+                         LOCALAPPDATA=str(tmp / "la"), OA_BRIDGE_DIR=str(data / "resolve")), capture_output=True, text=True)
+    assert "done" in out.stdout, out.stdout + out.stderr
+
+
 def shot(pg, name):
     if os.environ.get("OA_SHOTS"):
         pg.screenshot(path=str(Path(os.environ["OA_SHOTS"]) / f"{name}.png"), full_page=True)
@@ -90,9 +98,9 @@ try:
         pg.evaluate("api('voice_update',{id:S.voiceId,transcript:'Hello there.'}).then(nv=>{replaceVoice(nv);render()})")
         pg.click("[data-go=script]"); pg.evaluate("S.draft=null;render()"); pg.click("[data-act=r-markers]")
         wait(pg, "!!S.rwait", "waiting for markers"); problems["script-waiting"] = pg.evaluate(CHECK)
-        run_menu("Original Accent - Send markers")
+        run_console(pg.evaluate("S.rwait.console"))
         wait(pg, "!!S.rmark", "markers through the menu"); pg.click("[data-act=r-use-markers]")
-        assert len(pg.evaluate("draft().parts")) == 2
+        assert len(pg.evaluate("draft().parts")) == 3
         pg.click("[data-act=generate]")
         wait(pg, "document.querySelector('.cmp')", "Compare", 240)
         pg.evaluate("(async()=>{for(let i=0;i<S.job.parts.length;i++){S.job=await api('job_pick',{id:S.jobId,part:i,take:S.job.takes.find(t=>t.part===i).id})} render()})()")
@@ -100,9 +108,9 @@ try:
         pg.check("input[name=rplace][value=markers]")
         pg.click("[data-act=r-send]"); wait(pg, "!!S.rwait", "waiting to bring in takes")
         problems["deliver-waiting"] = pg.evaluate(CHECK)
-        run_menu("Original Accent - Bring in takes")
+        run_console(pg.evaluate("S.rwait.console"))
         wait(pg, "!!S.rsent", "takes brought in"); sent = pg.evaluate("S.rsent")
-        assert "2 placed" in sent, (sent, pg.evaluate("S.job.picks"), pg.evaluate("S.job.parts"))
+        assert "3 placed" in sent, (sent, pg.evaluate("S.job.picks"), pg.evaluate("S.job.parts"))
         pg.screenshot(path=str(tmp / "deliver.png"))
         b.close()
 finally:

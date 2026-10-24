@@ -57,6 +57,7 @@ oa_run("result", function()
     end
   end
   os.remove(OA_DIR .. "outbox.lua")       -- done: running the menu again won't import twice
+  os.remove(OA_DIR .. "outbox.json")
   return { id = req.id, imported = n, bin = table.concat(req.bin, "/"), placed = placed, tracks = tracks,
            timeline = tl and tl:GetName() or nil, fps = tl and oa_fps(project, tl) or nil, created = made }
 end)
