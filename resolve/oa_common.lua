@@ -89,16 +89,26 @@ local function oa_clip_fps(mpi, default)
   return tonumber(string.match(tostring(mpi:GetClipProperty("FPS") or ""), "[%d%.]+")) or default
 end
 
+-- a line per run in script-log.txt, so the app can tell "never ran" from "ran and failed"
+local function oa_log(line)
+  local f = io.open(OA_DIR .. "script-log.txt", "a")
+  if f then f:write(os.date("%Y-%m-%d %H:%M:%S") .. "  " .. line .. "\n"); f:close() end
+end
+
 -- run a menu item: whatever `fn` returns goes to the app as inbox-<kind>.json; a problem goes
 -- to the app too, so the explanation appears where the operator is looking
 local function oa_run(kind, fn)
-  local ok, res = pcall(fn)
+  print("Original Accent: running (" .. kind .. ")…")
+  oa_log("start " .. kind)
+  local ok, res = xpcall(fn, function(e) if type(e) == "table" then return e end return { trace = debug.traceback(tostring(e), 2) } end)
   local name = kind == "result" and "outbox-result.json" or ("inbox-" .. kind .. ".json")
   if ok then
     res.ok = true
-    if oa_write(name, res) then print("Original Accent: done. Switch back to Original Accent.") end
+    if oa_write(name, res) then oa_log("done " .. kind); print("Original Accent: done. Switch back to Original Accent.")
+    else oa_log("could not write " .. name) end
   else
-    local msg = (type(res) == "table" and res.oa) or ("Resolve reported a problem: " .. tostring(res))
+    local msg = res.oa or ("Resolve reported a problem: " .. tostring(res.trace))
+    oa_log("error " .. kind .. ": " .. msg)
     oa_write(name, { ok = false, error = msg })
     print("Original Accent: " .. msg)
   end

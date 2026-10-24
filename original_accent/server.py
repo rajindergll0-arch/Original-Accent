@@ -156,6 +156,7 @@ API = {
                               if a.get("route") == "studio" else wait_for("clip", a["which"]),
     "resolve_inbox": lambda a: resolve_inbox(a),
     "resolve_send": lambda a: resolve.send(a["id"], a.get("place", "none"), a.get("route", "studio")),
+    "resolve_lastrun": lambda a: resolve.last_run(float(a.get("since", 0))),
     "resolve_result": lambda a: resolve.outbox_result(float(a.get("since", 0))),
     "choices_clear": lambda a: (paths.DATA / "install-choices.json").unlink(missing_ok=True),
     "restart": lambda a: restart(),

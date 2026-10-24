@@ -383,6 +383,13 @@ setInterval(async () => {
     const r = w.kind === "result" ? await api("resolve_result", { since: w.since })
       : await api("resolve_inbox", { kind: w.kind, since: w.since, consent: w.args?.consent ? 1 : 0 });
     if (r && S.rwait === w) { S.rwait = null; await w.done(r); render(); }
+    else if (S.rwait === w && Date.now() / 1000 - w.since > 6) {
+      // no answer yet: has Resolve run the script at all? say so rather than wait silently
+      const st = await api("resolve_lastrun", { since: w.since });
+      const key = JSON.stringify(st);
+      if (key !== w.statusKey) { w.statusKey = key; w.status = st; render(); }
+      else if (!w.slow && Date.now() / 1000 - w.since > 10) { w.slow = true; render(); }
+    }
   } catch (e) { if (S.rwait === w) { S.rwait = null; render(); } showError(e.message); }
   finally { w.checking = false; }
 }, 1000);
@@ -390,8 +397,18 @@ function rWait(kinds) {
   const w = S.rwait;
   if (w && kinds.includes(w.kind)) return `<div class="panel rwait" style="display:flex;flex-direction:column;gap:.6rem"><div class="row"><span class="tally on"></span><strong>Waiting for Resolve</strong></div>
     <p class="note" style="margin:0">In DaVinci Resolve, choose <b>Workspace → Scripts → ${esc(w.menu)}</b>. This page carries on by itself when it's done.</p>
+    ${waitStatus(w)}
     <div class="row"><button class="btn sm" data-act="r-cancel">Cancel</button></div></div>`;
   if (S.rbusy && kinds.includes(S.rbusyKind)) return `<div class="panel rwait"><div class="row"><span class="tally on"></span><strong>${esc(S.rbusy)}</strong></div></div>`;
+  return "";
+}
+function waitStatus(w) {
+  const st = w.status;
+  if (!st || (!st.ran && !w.slow)) return "";
+  if (!st.ran) return `<p class="note" style="margin:0">Nothing from Resolve yet. If you've already chosen the menu item and nothing happened, open <b>Workspace → Console</b> in Resolve: it shows what the script said.</p>`;
+  const last = (st.tail[st.tail.length - 1] || "").replace(/^\S+ \S+\s+/, "");
+  if (/^start/.test(last)) return `<p class="note" style="margin:0">Resolve started the script but it hasn't finished. If it stays like this, <b>Workspace → Console</b> in Resolve shows why.</p>`;
+  if (/^could not write/.test(last)) return `<p class="note" style="margin:0" >Resolve ran the script but it couldn't save its answer for Original Accent. <b>Workspace → Console</b> in Resolve has the details.</p>`;
   return "";
 }
 function markerParts(m) {
@@ -993,8 +1010,8 @@ async function act(a, el) {
     S.rsent = null; S.rbusyKind = "send";
     const free = rFree(), since = Date.now() / 1000;
     await rStart("resolve_send", { id: S.jobId, place: S.rplace }, async (r) => {
-      if (r.done === false) { S.rwait = { kind: "result", menu: r.menu, since, done: (x) => { S.rsent = sentText(x); toast("Takes are in Resolve."); } }; return; }
-      S.rsent = sentText(r); toast("Takes are in Resolve.");
+      if (r.done === false) { S.rwait = { kind: "result", menu: r.menu, since, done: (x) => { S.rsent = sentText(x); toast(x.created ? `Takes are in Resolve, on a new timeline “${x.created}”.` : "Takes are in Resolve."); } }; return; }
+      S.rsent = sentText(r); toast(r.created ? `Takes are in Resolve, on a new timeline “${r.created}”.` : "Takes are in Resolve.");
     }, "Sending to Resolve…");
   }
   else if (a === "r-test") { S.rlive = (await api("resolve_status", { live: 1 })).live; render(); }

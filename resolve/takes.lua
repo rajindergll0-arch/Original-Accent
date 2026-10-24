@@ -4,8 +4,16 @@
 oa_run("result", function()
   local okf, req = pcall(dofile, OA_DIR .. "outbox.lua")
   if not okf or type(req) ~= "table" then oa_fail("Nothing to bring in. In Original Accent, press Send to Resolve on the Deliver page first.") end
-  local r, project, tl = oa_context(#(req.place or {}) > 0)
+  local r, project, tl = oa_context(false)
   local pool = project:GetMediaPool()
+  local made = nil
+  if #(req.place or {}) > 0 and not tl then
+    -- an empty project: make a timeline for the takes rather than refuse
+    local name = "Original Accent - " .. (req.job or "takes")
+    tl = pool:CreateEmptyTimeline(name)
+    if not tl then oa_fail("This project has no timeline, and Resolve wouldn't create one. Create a timeline, then try again.") end
+    project:SetCurrentTimeline(tl); made = name
+  end
   local folder = pool:GetRootFolder()
   for _, name in ipairs(req.bin) do
     local nxt = nil
@@ -50,5 +58,5 @@ oa_run("result", function()
   end
   os.remove(OA_DIR .. "outbox.lua")       -- done: running the menu again won't import twice
   return { id = req.id, imported = n, bin = table.concat(req.bin, "/"), placed = placed, tracks = tracks,
-           timeline = tl and tl:GetName() or nil, fps = tl and oa_fps(project, tl) or nil }
+           timeline = tl and tl:GetName() or nil, fps = tl and oa_fps(project, tl) or nil, created = made }
 end)

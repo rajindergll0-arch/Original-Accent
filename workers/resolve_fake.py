@@ -63,6 +63,8 @@ class Pool:
     def AddSubFolder(self, parent, name):
         f = Folder(name); parent.subs.append(f); return f
     def SetCurrentFolder(self, f): self.cur = f; return True
+    def CreateEmptyTimeline(self, name):
+        s = _state(); s["created"] = name; _save(s); return Timeline()
     def GetSelectedClips(self): return [Item(_demo_clip(), "Interview A-cam")]
     def ImportMedia(self, files):
         s = _state(); s["imported"] += files; _save(s)
@@ -94,11 +96,12 @@ class Timeline:
 
 
 class Project:
-    def __init__(self): self.pool, self.tl = Pool(), Timeline()
+    def __init__(self): self.pool, self.tl = Pool(), (None if os.environ.get("OA_TEST_NO_TIMELINE") else Timeline())
     def GetName(self): return "Demo project"
     def GetCurrentTimeline(self): return self.tl
+    def SetCurrentTimeline(self, t): self.tl = t; return True
     def GetMediaPool(self): return self.pool
-    def GetSetting(self, k): return self.tl.GetSetting(k)
+    def GetSetting(self, k): return Timeline().GetSetting(k)
 
 
 class PM:

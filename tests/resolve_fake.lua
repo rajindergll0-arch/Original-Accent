@@ -42,6 +42,10 @@ local pool = obj({
     for _, i in ipairs(infos) do FAKE_LOG.placed[#FAKE_LOG.placed + 1] = { file = i.mediaPoolItem:GetClipProperty("File Path"), track = i.trackIndex, frame = i.recordFrame, mediaType = i.mediaType } end
     return infos end,
 })
-local project = obj({ GetCurrentTimeline = function() return tl end, GetMediaPool = function() return pool end,
+local current = tl
+if os.getenv("OA_TEST_NO_TIMELINE") then current = nil end
+pool.CreateEmptyTimeline = function(_, name) FAKE_LOG.created = name; return tl end
+local project = obj({ GetCurrentTimeline = function() return current end, GetMediaPool = function() return pool end,
+  SetCurrentTimeline = function(_, t) current = t; return true end,
   GetSetting = function(_, k) return tl:GetSetting(k) end })
 resolve = obj({ GetProjectManager = function() return obj({ GetCurrentProject = function() return project end }) end })

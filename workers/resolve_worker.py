@@ -197,8 +197,15 @@ def op_send(r, a):
     a = {bin: [names], files: [paths], place: [{file, frame (absolute) | at: "playhead", seconds}],
          track: "name"}. Placed clips never go on existing tracks: new tracks are added, and a
     clip that would overlap the one before it goes on a further new track."""
-    project, tl = context(r, need_timeline=bool(a.get("place")))
+    project, tl = context(r, need_timeline=False)
     pool = project.GetMediaPool()
+    made = None
+    if a.get("place") and not tl:              # an empty project: make a timeline rather than refuse
+        made = "Original Accent - " + (a.get("job") or "takes")
+        tl = pool.CreateEmptyTimeline(made)
+        if not tl:
+            raise Problem("This project has no timeline, and Resolve wouldn't create one. Create a timeline, then try again.")
+        project.SetCurrentTimeline(tl)
     folder = _bin(pool, a["bin"])
     pool.SetCurrentFolder(folder)
     items = pool.ImportMedia(a["files"]) or []
@@ -233,7 +240,7 @@ def op_send(r, a):
                 raise Problem(f"Resolve wouldn't place {Path(p['file']).name} on the timeline.")
             placed.append({"file": Path(p["file"]).name, "tc": frames_to_tc(start, fps, drop_frame(tl, project)), "track": tracks[k]})
     return {"ok": True, "imported": len(items), "bin": "/".join(a["bin"]), "placed": placed, "tracks": tracks,
-            "timeline": tl.GetName() if tl else None}
+            "timeline": tl.GetName() if tl else None, "created": made}
 
 
 OPS = {"status": op_status, "clip": op_clip, "markers": op_markers, "send": op_send}

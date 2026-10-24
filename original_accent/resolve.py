@@ -120,6 +120,16 @@ def take_inbox(kind, since):
     return msg
 
 
+def last_run(since):
+    """Whether a menu script has run since `since`, and its last log lines: lets the page say
+    "Resolve hasn't run it yet" or show what went wrong, instead of waiting silently."""
+    f = BRIDGE / "script-log.txt"
+    if not f.exists():
+        return {"ran": False, "tail": []}
+    lines = f.read_text(encoding="utf-8", errors="replace").splitlines()[-4:]
+    return {"ran": f.stat().st_mtime >= since - 1, "tail": lines}
+
+
 def outbox_result(since):
     f = BRIDGE / "outbox-result.json"
     if f.exists() and f.stat().st_mtime >= since - 1:
@@ -199,7 +209,7 @@ def plan_send(jid, place):
 def send(jid, place, route):
     req = plan_send(jid, place)
     if route == "studio":
-        r = call("send", **{k: req[k] for k in ("bin", "files", "place", "track")})
+        r = call("send", **{k: req[k] for k in ("bin", "files", "place", "track", "job")})
         return {"done": True, **r}
     req["id"] = f"{int(time.time())}"
     write_outbox(req)
