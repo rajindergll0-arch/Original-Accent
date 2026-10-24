@@ -397,6 +397,8 @@ function rWait(kinds) {
   const w = S.rwait;
   if (w && kinds.includes(w.kind)) return `<div class="panel rwait" style="display:flex;flex-direction:column;gap:.6rem"><div class="row"><span class="tally on"></span><strong>Waiting for Resolve</strong></div>
     <p class="note" style="margin:0">In DaVinci Resolve, choose <b>Workspace → Scripts → ${esc(w.menu)}</b>. This page carries on by itself when it's done.</p>
+    ${w.console ? `<p class="note" style="margin:0">If nothing happens (Resolve 21.1 free only runs scripts from its Console): open <b>Workspace → Console</b>, choose <b>Lua</b>, paste this line and press Enter.</p>
+    <div class="row" style="flex-wrap:nowrap;gap:.5rem"><code class="mono small trunc" style="flex:1;min-width:0;padding:.45rem .6rem;background:var(--panel);border:1px solid var(--line);border-radius:6px" title="${esc(w.console)}">${esc(w.console)}</code><button class="btn sm" data-act="r-copy">Copy</button></div>` : ""}
     ${waitStatus(w)}
     <div class="row"><button class="btn sm" data-act="r-cancel">Cancel</button></div></div>`;
   if (S.rbusy && kinds.includes(S.rbusyKind)) return `<div class="panel rwait"><div class="row"><span class="tally on"></span><strong>${esc(S.rbusy)}</strong></div></div>`;
@@ -784,7 +786,7 @@ function resolvePanel() {
   return `<div class="panel" style="display:flex;flex-direction:column;gap:.8rem"><strong>DaVinci Resolve</strong>
     <span class="note">Take a voice from a clip, turn timeline markers into a script, and send picked takes into the edit.</span>
     ${opt("studio", "Resolve Studio: direct", "Original Accent controls Resolve itself, one click each time. In Resolve, set Preferences → System → General → External scripting using to <b>Local</b>.")}
-    ${opt("free", "Resolve (free) or Studio: through Resolve's Scripts menu", "From Resolve 21.1, the free edition can't be controlled from outside. Instead, Original Accent adds its own items to Resolve's <b>Workspace → Scripts</b> menu, and you run one when this app asks. Restart Resolve once after choosing this so the items appear.")}
+    ${opt("free", "Resolve (free) or Studio: through Resolve's Scripts menu", "From Resolve 21.1, the free edition can't be controlled from outside. Instead, Original Accent adds its own items to Resolve's <b>Workspace → Scripts</b> menu, and you run one when this app asks. Where the free edition won't run them from the menu, the app gives you a one-line command to paste into Resolve's Console instead. Restart Resolve once after choosing this so the menu items appear.")}
     ${opt("off", "Off", "Hide the Resolve buttons.")}
     ${r.mode === "studio" ? `<div class="row"><button class="btn sm" data-act="r-test">Test connection</button>${live ? `<span class="small ${live.ok ? "" : "wrap"}">${live.ok ? `<span class="dot" style="background:var(--voice)"></span> ${esc(live.product)} ${esc(live.version)} · ${esc(live.project || "no project")}${live.timeline ? ` · ${esc(live.timeline)}` : ""}` : `<span style="color:#ff7a6e">${esc(live.error)}</span>`}</span>` : ""}</div>` : ""}
     ${r.mode === "free" ? `<div class="note">${r.scripts ? "Menu items installed" : "Menu items not installed yet"} in <span class="mono small wrap">${esc(r.scripts_folder)}</span>${r.scripts_error ? ` <span style="color:#ff7a6e">${esc(r.scripts_error)}</span>` : ""}</div>` : ""}</div>`;
@@ -985,6 +987,7 @@ async function act(a, el) {
   else if (a === "export") { const o = exportOpts(); S.exportResult = await api("job_export", { id: S.jobId, separate: o.separate, joined: o.joined }); render(); }
   else if (a === "open-dir") { await api("open_folder", { path: S.exportResult.folder }); }
   else if (a === "r-cancel") { S.rwait = null; render(); }
+  else if (a === "r-copy") { await api("clipboard_set", { text: S.rwait.console }).catch(() => navigator.clipboard?.writeText(S.rwait.console)); toast("Copied. Paste it into Resolve's Console (Lua) and press Enter."); }
   else if (a === "r-voice") {
     if (!S.consent) throw new Error("Tick “I have the speaker's permission to clone their voice” first.");
     S.rbusyKind = "clip";
@@ -1010,7 +1013,7 @@ async function act(a, el) {
     S.rsent = null; S.rbusyKind = "send";
     const free = rFree(), since = Date.now() / 1000;
     await rStart("resolve_send", { id: S.jobId, place: S.rplace }, async (r) => {
-      if (r.done === false) { S.rwait = { kind: "result", menu: r.menu, since, done: (x) => { S.rsent = sentText(x); toast(x.created ? `Takes are in Resolve, on a new timeline “${x.created}”.` : "Takes are in Resolve."); } }; return; }
+      if (r.done === false) { S.rwait = { kind: "result", menu: r.menu, console: r.console, since, done: (x) => { S.rsent = sentText(x); toast(x.created ? `Takes are in Resolve, on a new timeline “${x.created}”.` : "Takes are in Resolve."); } }; return; }
       S.rsent = sentText(r); toast(r.created ? `Takes are in Resolve, on a new timeline “${r.created}”.` : "Takes are in Resolve.");
     }, "Sending to Resolve…");
   }

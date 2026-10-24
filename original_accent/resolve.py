@@ -77,6 +77,12 @@ def install_scripts():
     return {"folder": str(d), "scripts": list(MENU.values())}
 
 
+def console_line(key):
+    """One line for Resolve's Console (Lua): runs the same menu script by hand. Resolve 21.1 free
+    keeps console scripting while the Workspace > Scripts menu needs Studio."""
+    return f"dofile([[{scripts_dir() / (MENU[key] + '.lua')}]])"
+
+
 def scripts_installed():
     return all((scripts_dir() / f"{n}.lua").exists() for n in MENU.values())
 
@@ -213,4 +219,4 @@ def send(jid, place, route):
         return {"done": True, **r}
     req["id"] = f"{int(time.time())}"
     write_outbox(req)
-    return {"done": False, "menu": MENU["takes"], "files": len(req["files"]), "placed": len(req["place"])}
+    return {"done": False, "menu": MENU["takes"], "console": console_line("takes"), "files": len(req["files"]), "placed": len(req["place"])}
