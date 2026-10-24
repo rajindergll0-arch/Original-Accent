@@ -9,7 +9,7 @@ oa_run("clip", function()
     item = nil
     local here = oa_tc_to_frames(tl:GetCurrentTimecode(), fps)
     for i = 1, (tl:GetTrackCount("audio") or 0) do
-      for _, it in pairs(tl:GetItemListInTrack("audio", i) or {}) do
+      for _, it in ipairs(oa_objects(tl:GetItemListInTrack("audio", i))) do
         if it:GetStart() <= here and here < it:GetEnd() and it:GetMediaPoolItem() then item = it; break end
       end
       if item then break end

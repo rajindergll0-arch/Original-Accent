@@ -17,15 +17,15 @@ oa_run("result", function()
   local folder = pool:GetRootFolder()
   for _, name in ipairs(req.bin) do
     local nxt = nil
-    for _, f in pairs(folder:GetSubFolderList() or {}) do if f:GetName() == name then nxt = f; break end end
+    for _, f in ipairs(oa_objects(folder:GetSubFolderList())) do if f:GetName() == name then nxt = f; break end end
     folder = nxt or pool:AddSubFolder(folder, name)
     if not folder then oa_fail("Couldn't create the bin " .. name .. " in the Media Pool.") end
   end
   pool:SetCurrentFolder(folder)
-  local items = pool:ImportMedia(req.files) or {}
+  local items = oa_objects(pool:ImportMedia(req.files))
   local byfile, n = {}, 0
   local norm = function(p) return string.lower(string.gsub(p, "/", "\\")) end
-  for i, it in pairs(items) do
+  for i, it in ipairs(items) do
     n = n + 1
     local p = it:GetClipProperty("File Path") or ""
     byfile[norm(p ~= "" and p or req.files[i])] = it

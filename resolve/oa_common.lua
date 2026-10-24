@@ -101,6 +101,21 @@ local function oa_tc_to_frames(tc, fps)
   return total
 end
 
+-- Lists from Resolve's Lua API can carry extra fields besides the objects (a count, say), so
+-- only take the objects: never index whatever pairs() happens to return.
+local function oa_objects(t)
+  local out = {}
+  if type(t) ~= "table" then return out end
+  local keys = {}
+  for k, v in pairs(t) do if type(v) == "userdata" or type(v) == "table" then keys[#keys + 1] = k end end
+  table.sort(keys, function(a, b)
+    if type(a) == type(b) and (type(a) == "number" or type(a) == "string") then return a < b end
+    return type(a) == "number"
+  end)
+  for _, k in ipairs(keys) do out[#out + 1] = t[k] end
+  return out
+end
+
 local function oa_clip_fps(mpi, default)
   return tonumber(string.match(tostring(mpi:GetClipProperty("FPS") or ""), "[%d%.]+")) or default
 end
@@ -118,7 +133,7 @@ end
 -- run a menu item: whatever `fn` returns goes to the app as inbox-<kind>.json; a problem goes
 -- to the app too, so the explanation appears where the operator is looking
 local function oa_run(kind, fn)
-  print("Original Accent: running (" .. kind .. ")…")
+  print("Original Accent: running (" .. kind .. ")...")
   oa_log("start " .. kind)
   -- the Console has no `debug` library either, so the handler keeps to plain Lua
   local ok, res = xpcall(fn, function(e)
@@ -135,7 +150,7 @@ local function oa_run(kind, fn)
       -- the takes are in; only the receipt for the app couldn't be saved (the free Console can't write files)
       print("Original Accent: done. " .. (res.imported or 0) .. " file(s) imported to " .. tostring(res.bin) ..
             ((res.placed and #res.placed > 0) and (", " .. #res.placed .. " placed on the timeline.") or "."))
-      print("Original Accent: in Original Accent, press “It's done”.")
+      print('Original Accent: in Original Accent, press "It\'s done".')
     else oa_log("could not write " .. name) end
   else
     local msg = res.oa or ("Resolve reported a problem: " .. tostring(res.trace or res[1] or "unknown"))

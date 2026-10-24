@@ -4,7 +4,7 @@ oa_run("clip", function()
   local r, project, tl = oa_context(false)
   local sel = project:GetMediaPool():GetSelectedClips() or {}
   local mpi = nil
-  for _, c in pairs(sel) do mpi = c; break end
+  mpi = oa_objects(sel)[1]
   if not mpi then oa_fail("Select the speaker's clip in the Media Pool first.") end
   local fps = oa_clip_fps(mpi, oa_fps(project, tl))
   local msg = { path = mpi:GetClipProperty("File Path"), name = mpi:GetName(), how = "the whole clip" }

@@ -9,7 +9,8 @@ local function item(path, name)
     GetMarkInOut = function() return { audio = { ["in"] = 24 * 12, out = 24 * 30 - 1 } } end })
 end
 local root = obj({ GetName = function() return "Master" end, subs = {} })
-root.GetSubFolderList = function(self) return self.subs end
+local function counted(t) local c = {}; for i, v in ipairs(t) do c[i] = v end; c.n = #t; return c end
+root.GetSubFolderList = function(self) return counted(self.subs) end
 local audio = 2
 local tl = obj({
   GetName = function() return "Launch film v3" end,
@@ -30,14 +31,14 @@ local tl = obj({
 local pool = obj({
   GetRootFolder = function() return root end,
   AddSubFolder = function(_, parent, name)
-    local f = obj({ GetName = function() return name end, subs = {} }); f.GetSubFolderList = function(self) return self.subs end
+    local f = obj({ GetName = function() return name end, subs = {} }); f.GetSubFolderList = function(self) return counted(self.subs) end
     parent.subs[#parent.subs + 1] = f; return f end,
   SetCurrentFolder = function() return true end,
   GetSelectedClips = function() return { item(CLIP, "Interview A-cam") } end,
   ImportMedia = function(_, files)
     local out = {}
     for i, f in ipairs(files) do FAKE_LOG.imported[#FAKE_LOG.imported + 1] = f; out[i] = item(f) end
-    return out end,
+    return counted(out) end,
   AppendToTimeline = function(_, infos)
     for _, i in ipairs(infos) do FAKE_LOG.placed[#FAKE_LOG.placed + 1] = { file = i.mediaPoolItem:GetClipProperty("File Path"), track = i.trackIndex, frame = i.recordFrame, mediaType = i.mediaType } end
     return infos end,
